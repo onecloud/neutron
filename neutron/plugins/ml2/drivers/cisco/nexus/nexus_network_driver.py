@@ -150,11 +150,8 @@ class CiscoNexusDriver(object):
 
     def delete_vlan(self, nexus_host, vlanid):
         """Delete a VLAN on Nexus Switch given the VLAN ID."""
-        disvlanflag = bool(self.nexus_switches[nexus_host, 'disvlanflag'])
-
-        if disvlanflag:
-            pass
-        else:
+        disvlanflag = self.nexus_switches[nexus_host, 'disvlanflag']
+        if disvlanflag in ['False', 'false']:
             confstr = snipp.CMD_NO_VLAN_CONF_SNIPPET % vlanid
             confstr = self.create_xml_snippet(confstr)
             self._edit_config(nexus_host, target='running', config=confstr)
@@ -178,11 +175,8 @@ class CiscoNexusDriver(object):
     def disable_vlan_on_trunk_int(self, nexus_host, vlanid, intf_type,
                                   interface):
         """Disable a VLAN on a trunk interface."""
-        disvlanflag = bool(self.nexus_switches[nexus_host, 'disvlanflag'])
-
-        if disvlanflag:
-            pass
-        else:
+        disvlanflag = self.nexus_switches[nexus_host, 'disvlanflag']
+        if disvlanflag in ['False', 'false']:
             confstr = (snipp.CMD_NO_VLAN_INT_SNIPPET %
                        (intf_type, interface, vlanid, intf_type))
             confstr = self.create_xml_snippet(confstr)
