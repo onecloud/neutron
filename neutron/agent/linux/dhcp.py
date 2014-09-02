@@ -58,6 +58,8 @@ OPTS = [
         'dnsmasq_lease_max',
         default=(2 ** 24),
         help=_('Limit number of leases to prevent a denial-of-service.')),
+    cfg.BoolOpt('dhcp_broadcast_reply', default=False,
+                help=_("Use broadcast in DHCP replies")),
 ]
 
 IPV4 = 4
@@ -428,6 +430,9 @@ class Dnsmasq(DhcpLocalProcess):
 
         if self.conf.dhcp_domain:
             cmd.append('--domain=%s' % self.conf.dhcp_domain)
+
+        if self.conf.dhcp_broadcast_reply:
+            cmd.append('--dhcp-broadcast')
 
         ip_wrapper = ip_lib.IPWrapper(self.root_helper,
                                       self.network.namespace)
