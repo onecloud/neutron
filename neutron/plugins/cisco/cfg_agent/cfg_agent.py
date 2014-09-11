@@ -42,6 +42,8 @@ from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
 from neutron import service as neutron_service
 
+from neutron.openstack.common.rpc import proxy # ICEHOUSE_BACKPORT
+
 LOG = logging.getLogger(__name__)
 
 # Constants for agent registration.
@@ -49,7 +51,7 @@ REGISTRATION_RETRY_DELAY = 2
 MAX_REGISTRATION_ATTEMPTS = 30
 
 
-class CiscoDeviceManagementApi(n_rpc.RpcProxy):
+class CiscoDeviceManagementApi(proxy.RpcProxy): # ICEHOUSE_BACKPORT
     """Agent side of the device manager RPC API."""
 
     BASE_RPC_API_VERSION = '1.0'
@@ -341,9 +343,11 @@ def main(manager='neutron.plugins.cisco.cfg_agent.'
     config.register_root_helper(conf)
     conf.register_opts(interface.OPTS)
     conf.register_opts(external_process.OPTS)
-    common_config.init(sys.argv[1:])
+    # common_config.init(sys.argv[1:])   # ICEHOUSE_BACKPORT
+    common_config.parse(sys.argv[1:])
     conf(project='neutron')
-    config.setup_logging()
+    # config.setup_logging() # ICEHOUSE_BACKPORT
+    config.setup_logging(conf)
     server = neutron_service.Service.create(
         binary='neutron-cisco-cfg-agent',
         topic=c_constants.CFG_AGENT,

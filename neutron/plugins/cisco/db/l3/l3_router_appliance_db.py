@@ -60,8 +60,8 @@ class RouterInternalError(n_exc.NeutronException):
 class RouterBindingInfoError(n_exc.NeutronException):
     message = _("Could not get binding information for router %(router_id)s.")
 
-
-class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin):
+# class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_dbonly_mixin): # ICEHOUSE_BACKPORT
+class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
     """Mixin class implementing Neutron's routing service using appliances."""
 
     # Dictionary of routers for which new scheduling attempts should

@@ -31,6 +31,9 @@ from neutron.plugins.cisco.cfg_agent.device_drivers import driver_mgr
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
 
+from neutron.openstack.common.rpc import proxy  # ICEHOUSE_BACKPORT
+from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
+
 LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
@@ -84,8 +87,8 @@ class RouterInfo(object):
     def router_name(self):
         return N_ROUTER_PREFIX + self.router_id
 
-
-class CiscoRoutingPluginApi(n_rpc.RpcProxy):
+# class CiscoRoutingPluginApi(n_rpc.RpcProxy):  # ICEHOUSE_BACKPORT
+class CiscoRoutingPluginApi(proxy.RpcProxy):
     """RoutingServiceHelper(Agent) side of the  routing RPC API."""
 
     BASE_RPC_API_VERSION = '1.1'
@@ -131,10 +134,12 @@ class RoutingServiceHelper():
         self._setup_rpc()
 
     def _setup_rpc(self):
-        self.conn = n_rpc.create_connection(new=True)
+        # self.conn = n_rpc.create_connection(new=True)  # ICEHOUSE_BACKPORT
+        self.conn = o_rpc.create_connection(new=True)
         self.endpoints = [self]
         self.conn.create_consumer(self.topic, self.endpoints, fanout=False)
-        self.conn.consume_in_threads()
+        # self.conn.consume_in_threads()  # ICEHOUSE_BACKPORT
+        self.conn.consume_in_thread()
 
     ### Notifications from Plugin ####
 
@@ -286,7 +291,8 @@ class RoutingServiceHelper():
             if device_ids:
                 return self.plugin_rpc.get_routers(self.context,
                                                    hd_ids=device_ids)
-        except n_rpc.RPCException:
+        # except n_rpc.RPCException:  # ICEHOUSE_BACKPORT
+        except o_rpc.common.RPCException:
             LOG.exception(_("RPC Error in fetching routers from plugin"))
             self.fullsync = True
 

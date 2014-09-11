@@ -17,7 +17,8 @@
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
 from neutron.db import agents_db
-from neutron.db import common_db_mixin
+# from neutron.db import common_db_mixin  # ICEHOUSE_BACKPORT
+from neutron.db import db_base_plugin_v2
 from neutron import manager
 from neutron.plugins.cisco.db.l3 import device_handling_db
 from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
@@ -26,9 +27,11 @@ from neutron.plugins.cisco.l3.rpc import (l3_router_cfgagent_rpc_cb as
 from neutron.plugins.cisco.l3.rpc import devices_cfgagent_rpc_cb as devices_rpc
 from neutron.plugins.common import constants
 
+from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
-class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
-                                    l3_router_rpc.L3RouterCfgRpcCallbackMixin,
+
+# class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
+class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
                                     devices_rpc.DeviceCfgRpcCallbackMixin):
     RPC_API_VERSION = '1.1'
 
@@ -40,8 +43,8 @@ class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
     def _core_plugin(self):
         return manager.NeutronManager.get_plugin()
 
-
-class CiscoRouterPlugin(common_db_mixin.CommonDbMixin,
+# class CiscoRouterPlugin(common_db_mixin.CommonDbMixin, # ICEHOUSE_BACKPORT
+class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                         agents_db.AgentDbMixin,
                         l3_router_appliance_db.L3RouterApplianceDBMixin,
                         device_handling_db.DeviceHandlingMixin):
@@ -65,12 +68,14 @@ class CiscoRouterPlugin(common_db_mixin.CommonDbMixin,
     def setup_rpc(self):
         # RPC support
         self.topic = topics.L3PLUGIN
-        self.conn = n_rpc.create_connection(new=True)
+        # self.conn = n_rpc.create_connection(new=True)  # ICEHOUSE_BACKPORT
+        self.conn = o_rpc.create_connection(new=True)
         self.endpoints = [CiscoRouterPluginRpcCallbacks(self)]
         self.conn.create_consumer(self.topic, self.endpoints,
                                   fanout=False)
         # Consume from all consumers in threads
-        self.conn.consume_in_threads()
+        # self.conn.consume_in_threads()  # ICEHOUSE_BACKPORT
+        self.conn.consume_in_thread()
 
     def get_plugin_type(self):
         return constants.L3_ROUTER_NAT
