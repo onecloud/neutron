@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Copyright 2012, Cisco Systems, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -24,9 +22,6 @@ from neutron.openstack.common import uuidutils
 from neutron.plugins.cisco.common import cisco_constants as const
 from neutron.plugins.cisco.common import cisco_exceptions as c_exc
 from neutron.plugins.cisco.db import network_models_v2
-# Do NOT remove this import. It is required for all the models to be seen
-# by db.initialize() when called from VirtualPhysicalSwitchModelV2.__init__.
-from neutron.plugins.cisco.db import nexus_models_v2  # noqa
 from neutron.plugins.openvswitch import ovs_models_v2
 
 
@@ -185,6 +180,11 @@ def get_all_n1kv_credentials():
     session = db.get_session()
     return (session.query(network_models_v2.Credential).
             filter_by(type='n1kv'))
+
+
+def delete_all_n1kv_credentials():
+    session = db.get_session()
+    session.query(network_models_v2.Credential).filter_by(type='n1kv').delete()
 
 
 def add_provider_network(network_id, network_type, segmentation_id):

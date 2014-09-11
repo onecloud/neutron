@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2013 Cisco Systems, Inc.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -48,10 +46,14 @@ RESOURCE_ATTRIBUTE_MAP = {
                              'is_visible': True, 'default': ''},
         'tenant_id': {'allow_post': True, 'allow_put': False,
                       'is_visible': False, 'default': ''},
-        'add_tenant': {'allow_post': True, 'allow_put': True,
-                       'is_visible': True, 'default': None},
-        'remove_tenant': {'allow_post': True, 'allow_put': True,
-                          'is_visible': True, 'default': None},
+        'add_tenants': {'allow_post': True, 'allow_put': True,
+                        'is_visible': True, 'default': None,
+                        'convert_to': attributes.convert_none_to_empty_list},
+        'remove_tenants': {
+            'allow_post': True, 'allow_put': True,
+            'is_visible': True, 'default': None,
+            'convert_to': attributes.convert_none_to_empty_list,
+        },
     },
     'network_profile_bindings': {
         'profile_id': {'allow_post': False, 'allow_put': False,

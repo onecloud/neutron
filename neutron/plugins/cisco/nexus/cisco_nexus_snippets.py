@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Copyright 2011 Cisco Systems, Inc.  All rights reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -20,11 +18,6 @@
 """
 Nexus-OS XML-based configuration snippets
 """
-
-import logging
-
-
-LOG = logging.getLogger(__name__)
 
 
 # The following are standard strings, messages used to communicate with Nexus,

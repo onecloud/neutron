@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
 # Copyright 2012 Cisco Systems, Inc.
 # All rights reserved.
 #
@@ -24,22 +22,22 @@
 PlugIn for Nexus OS driver
 """
 
-import logging
 
 from neutron.openstack.common import excutils
 from neutron.openstack.common import importutils
+from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.common import cisco_constants as const
 from neutron.plugins.cisco.common import cisco_exceptions as cisco_exc
 from neutron.plugins.cisco.common import config as conf
 from neutron.plugins.cisco.db import network_db_v2 as cdb
 from neutron.plugins.cisco.db import nexus_db_v2 as nxos_db
-from neutron.plugins.cisco.l2device_plugin_base import L2DevicePluginBase
+from neutron.plugins.cisco import l2device_plugin_base
 
 
 LOG = logging.getLogger(__name__)
 
 
-class NexusPlugin(L2DevicePluginBase):
+class NexusPlugin(l2device_plugin_base.L2DevicePluginBase):
     """Nexus PlugIn Main Class."""
     _networks = {}
 

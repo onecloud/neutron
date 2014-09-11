@@ -1,5 +1,3 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-#
 # Copyright 2011 Cisco Systems, Inc.  All rights reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -108,3 +106,16 @@ NEXUS_VLAN_RESERVED_MIN = 3968
 NEXUS_VLAN_RESERVED_MAX = 4047
 NEXUS_VXLAN_MIN = 4096
 NEXUS_VXLAN_MAX = 16000000
+
+# Type and topic for Cisco cfg agent
+# ==================================
+AGENT_TYPE_CFG = 'Cisco cfg agent'
+
+# Topic for Cisco configuration agent
+CFG_AGENT = 'cisco_cfg_agent'
+# Topic for routing service helper in Cisco configuration agent
+CFG_AGENT_L3_ROUTING = 'cisco_cfg_agent_l3_routing'
+
+# Values for network profile fields
+ADD_TENANTS = 'add_tenants'
+REMOVE_TENANTS = 'remove_tenants'
