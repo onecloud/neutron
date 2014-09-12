@@ -43,6 +43,9 @@ class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
     def _core_plugin(self):
         return manager.NeutronManager.get_plugin()
 
+    def create_rpc_dispatcher(self):
+        return n_rpc.PluginRpcDispatcher(self)
+
 # class CiscoRouterPlugin(common_db_mixin.CommonDbMixin, # ICEHOUSE_BACKPORT
 class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                         agents_db.AgentDbMixin,
@@ -70,8 +73,12 @@ class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         self.topic = topics.L3PLUGIN
         # self.conn = n_rpc.create_connection(new=True)  # ICEHOUSE_BACKPORT
         self.conn = o_rpc.create_connection(new=True)
+        self.callbacks = CiscoRouterPluginRpcCallbacks(self)  # ICEHOUSE_BACKPORT
+        self.dispatcher = self.callbacks.create_rpc_dispatcher() # ICEHOUSE_BACKPORT
         self.endpoints = [CiscoRouterPluginRpcCallbacks(self)]
-        self.conn.create_consumer(self.topic, self.endpoints,
+        # self.conn.create_consumer(self.topic, self.endpoints, # ICEHOUSE_BACKPORT
+        #                           fanout=False)
+        self.conn.create_consumer(self.topic, self.dispatcher,
                                   fanout=False)
         # Consume from all consumers in threads
         # self.conn.consume_in_threads()  # ICEHOUSE_BACKPORT
