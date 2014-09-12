@@ -44,7 +44,7 @@ class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
         return manager.NeutronManager.get_plugin()
 
     def create_rpc_dispatcher(self):
-        return n_rpc.PluginRpcDispatcher(self)
+        return n_rpc.PluginRpcDispatcher([self])
 
 # class CiscoRouterPlugin(common_db_mixin.CommonDbMixin, # ICEHOUSE_BACKPORT
 class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
