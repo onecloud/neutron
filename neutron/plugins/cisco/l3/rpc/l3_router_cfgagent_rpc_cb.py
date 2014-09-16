@@ -27,8 +27,9 @@ LOG = logging.getLogger(__name__)
 class L3RouterCfgRpcCallbackMixin(object):
     """Mixin for Cisco cfg agent rpc support in L3 routing service plugin."""
 
-    def cfg_sync_routers(self, context, host, router_ids=None,
-                         hosting_device_ids=None):
+    # def cfg_sync_routers(self, context, host, router_ids=None, # ICEHOUSE_BACKPORT
+    #                      hosting_device_ids=None):
+    def sync_routers(self, context, **kwargs):
         """Sync routers according to filters to a specific Cisco cfg agent.
 
         @param context: contains user information
@@ -41,6 +42,10 @@ class L3RouterCfgRpcCallbackMixin(object):
         """
         context = neutron_context.get_admin_context()
         try:
+            host = kwargs.get('host')   # ICEHOUSE_BACKPORT
+            router_ids = kwargs.get('router_ids')  #
+            hosting_device_ids = kwargs.get('hostiing_device_ids') #
+
             routers = (
                 self._l3plugin.list_active_sync_routers_on_hosting_devices(
                     context, host, router_ids, hosting_device_ids))

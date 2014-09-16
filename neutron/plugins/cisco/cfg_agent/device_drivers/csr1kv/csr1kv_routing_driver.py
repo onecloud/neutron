@@ -57,7 +57,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             if credentials:
                 self._csr_user = credentials['username']
                 self._csr_password = credentials['password']
-            self._timeout = cfg.CONF.device_connection_timeout
+            # self._timeout = cfg.CONF.device_connection_timeout
+            self._timeout = device_params['booting_time']
             self._csr_conn = None
             self._intfs_enabled = False
         except KeyError as e:

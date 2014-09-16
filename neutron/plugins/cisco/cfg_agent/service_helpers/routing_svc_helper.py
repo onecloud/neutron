@@ -34,6 +34,7 @@ from neutron.plugins.cisco.common import cisco_constants as c_constants
 from neutron.openstack.common.rpc import proxy  # ICEHOUSE_BACKPORT
 from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
+
 LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
@@ -107,14 +108,23 @@ class CiscoRoutingPluginApi(proxy.RpcProxy):
                         hosting devices will be returned.
         """
         return self.call(context,
-                         self.make_msg('cfg_sync_routers',
+                         self.make_msg('sync_routers',
                                        host=self.host,
                                        router_ids=router_ids,
                                        hosting_device_ids=hd_ids),
                          topic=self.topic)
 
+    def create_rpc_dispatcher(self):
+        return n_rpc.PluginRpcDispatcher([self])
+
 
 class RoutingServiceHelper():
+
+    _use_vm = False
+
+    BASE_RPC_API_VERSION = '1.1'
+    def create_rpc_dispatcher(self):
+        return n_rpc.PluginRpcDispatcher([self])
 
     def __init__(self, host, conf, cfg_agent):
         self.conf = conf
@@ -137,8 +147,10 @@ class RoutingServiceHelper():
         # self.conn = n_rpc.create_connection(new=True)  # ICEHOUSE_BACKPORT
         self.conn = o_rpc.create_connection(new=True)
         self.endpoints = [self]
-        self.conn.create_consumer(self.topic, self.endpoints, fanout=False)
+        # self.conn.create_consumer(self.topic, self.endpoints, fanout=False)
         # self.conn.consume_in_threads()  # ICEHOUSE_BACKPORT
+        self.dispatcher = self.create_rpc_dispatcher() # ICEHOUSE_BACKPORT
+        self.conn.create_consumer(self.topic, self.dispatcher, fanout=False)
         self.conn.consume_in_thread()
 
     ### Notifications from Plugin ####
@@ -215,21 +227,30 @@ class RoutingServiceHelper():
                 resources['routers'] = routers
             if removed_routers:
                 resources['removed_routers'] = removed_routers
-            hosting_devices = self._sort_resources_per_hosting_device(
-                resources)
+
+            if self._use_vm is True:
+                hosting_devices = self._sort_resources_per_hosting_device(
+                    resources)
 
             # Dispatch process_services() for each hosting device
             pool = eventlet.GreenPool()
-            for device_id, resources in hosting_devices.items():
-                routers = resources.get('routers')
-                removed_routers = resources.get('removed_routers')
+
+            if self._use_vm is True:
+                for device_id, resources in hosting_devices.items():
+                    routers = resources.get('routers')
+                    removed_routers = resources.get('removed_routers')
+                    pool.spawn_n(self._process_routers, routers, removed_routers,
+                                 device_id, all_routers=all_routers_flag)
+                    pool.waitall()
+                    if removed_devices_info:
+                        for hd_id in removed_devices_info['hosting_data']:
+                            self._drivermgr.remove_driver_for_hosting_device(hd_id)
+                            LOG.debug("Routing service processing successfully completed")
+            else:
                 pool.spawn_n(self._process_routers, routers, removed_routers,
-                             device_id, all_routers=all_routers_flag)
-            pool.waitall()
-            if removed_devices_info:
-                for hd_id in removed_devices_info['hosting_data']:
-                    self._drivermgr.remove_driver_for_hosting_device(hd_id)
-            LOG.debug("Routing service processing successfully completed")
+                             0, all_routers=all_routers_flag)
+                pool.waitall()
+                
         except Exception:
             LOG.exception(_("Failed processing routers"))
             self.fullsync = True
@@ -378,11 +399,14 @@ class RoutingServiceHelper():
                     if not r['admin_state_up']:
                         continue
                     cur_router_ids.add(r['id'])
-                    hd = r['hosting_device']
-                    if not self._dev_status.is_hosting_device_reachable(hd):
-                        LOG.info(_("Router: %(id)s is on an unreachable "
-                                   "hosting device. "), {'id': r['id']})
-                        continue
+
+                    if self._use_vm is True:
+                        hd = r['hosting_device']
+                        if not self._dev_status.is_hosting_device_reachable(hd):
+                            LOG.info(_("Router: %(id)s is on an unreachable "
+                                       "hosting device. "), {'id': r['id']})
+                            continue
+
                     if r['id'] not in self.router_info:
                         self._router_added(r['id'], r)
                     ri = self.router_info[r['id']]
@@ -557,7 +581,7 @@ class RoutingServiceHelper():
             if deconfigure:
                 self._process_router(ri)
                 driver = self._drivermgr.get_driver(router_id)
-                driver.router_removed(ri, deconfigure)
+                driver.router_removed(ri)
                 self._drivermgr.remove_driver(router_id)
             del self.router_info[router_id]
             self.removed_routers.discard(router_id)

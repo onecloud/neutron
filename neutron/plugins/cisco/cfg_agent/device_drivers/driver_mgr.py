@@ -19,6 +19,7 @@ from neutron.openstack.common import importutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.cfg_agent import cfg_exceptions
 
+
 LOG = logging.getLogger(__name__)
 
 
@@ -40,6 +41,8 @@ class DeviceDriverManager(object):
 
     This class is used by the service helper classes.
     """
+
+    _use_vm = False
 
     def __init__(self):
         self._drivers = {}
@@ -64,17 +67,25 @@ class DeviceDriverManager(object):
         """
         try:
             resource_id = resource['id']
-            hosting_device = resource['hosting_device']
-            hd_id = hosting_device['id']
-            if hd_id in self._hosting_device_routing_drivers_binding:
-                driver = self._hosting_device_routing_drivers_binding[hd_id]
-                self._drivers[resource_id] = driver
+            if self._use_vm is True:
+                hosting_device = resource['hosting_device']
+                hd_id = hosting_device['id']
+                if hd_id in self._hosting_device_routing_drivers_binding:
+                    driver = self._hosting_device_routing_drivers_binding[hd_id]
+                    self._drivers[resource_id] = driver
+                else:
+                    driver_class = resource['router_type']['cfg_agent_driver']
+                    driver = importutils.import_object(driver_class,
+                                                       **hosting_device)
+                    self._hosting_device_routing_drivers_binding[hd_id] = driver
+                    self._drivers[resource_id] = driver
             else:
+                hosting_device = resource['hosting_device']
                 driver_class = resource['router_type']['cfg_agent_driver']
                 driver = importutils.import_object(driver_class,
                                                    **hosting_device)
-                self._hosting_device_routing_drivers_binding[hd_id] = driver
                 self._drivers[resource_id] = driver
+                                    
             return driver
         except ImportError:
             LOG.exception(_("Error loading cfg agent driver %(driver)s for "

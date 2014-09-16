@@ -69,6 +69,7 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
     _backlogged_routers = {}
     _refresh_router_backlog = True
     _heartbeat = None
+    _use_vm = False
 
     @property
     def l3_cfg_rpc_notifier(self):
@@ -82,18 +83,24 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         self._l3_cfg_rpc_notifier = value
 
     def create_router(self, context, router):
-        with context.session.begin(subtransactions=True):
-            if self.mgmt_nw_id() is None:
-                raise RouterCreateInternalError()
-            router_created = (super(L3RouterApplianceDBMixin, self).
-                              create_router(context, router))
-            r_hd_b_db = l3_models.RouterHostingDeviceBinding(
-                router_id=router_created['id'],
-                auto_schedule=True,
-                hosting_device_id=None)
-            context.session.add(r_hd_b_db)
-        # backlog so this new router gets scheduled asynchronously
-        self.backlog_router(r_hd_b_db['router'])
+        if self._use_vm is True:
+            with context.session.begin(subtransactions=True):
+                if self.mgmt_nw_id() is None:
+                    raise RouterCreateInternalError()
+                router_created = (super(L3RouterApplianceDBMixin, self).
+                                  create_router(context, router))
+                r_hd_b_db = l3_models.RouterHostingDeviceBinding(
+                    router_id=router_created['id'],
+                    auto_schedule=True,
+                    hosting_device_id=None)
+                context.session.add(r_hd_b_db)
+                # backlog so this new router gets scheduled asynchronously
+                self.backlog_router(r_hd_b_db['router'])
+        else:
+            with context.session.begin(subtransactions=True):
+                router_created = (super(L3RouterApplianceDBMixin, self).
+                                  create_router(context, router))
+                self.backlog_router(router_created)  # backlog or start immediatey?
         return router_created
 
     def update_router(self, context, id, router):
@@ -113,15 +120,17 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
                 # already scheduled.
                 self._add_type_and_hosting_device_info(e_context, o_r,
                                                        schedule=False)
-                p_drv = self.get_hosting_device_plugging_driver()
-                if p_drv is not None:
-                    p_drv.teardown_logical_port_connectivity(e_context,
-                                                             o_r_db.gw_port)
+                if self._use_vm is True:
+                    p_drv = self.get_hosting_device_plugging_driver()
+                    if p_drv is not None:
+                        p_drv.teardown_logical_port_connectivity(e_context,
+                                                                 o_r_db.gw_port)
             router_updated = (
                 super(L3RouterApplianceDBMixin, self).update_router(
                     context, id, router))
             routers = [copy.deepcopy(router_updated)]
             self._add_type_and_hosting_device_info(e_context, routers[0])
+
         self.l3_cfg_rpc_notifier.routers_updated(context, routers)
         return router_updated
 
@@ -130,19 +139,22 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         router = self._make_router_dict(router_db)
         with context.session.begin(subtransactions=True):
             e_context = context.elevated()
-            r_hd_binding = self._get_router_binding_info(e_context, id)
-            self._add_type_and_hosting_device_info(
-                e_context, router, binding_info=r_hd_binding, schedule=False)
-            if router_db.gw_port is not None:
-                p_drv = self.get_hosting_device_plugging_driver()
-                if p_drv is not None:
-                    p_drv.teardown_logical_port_connectivity(e_context,
+
+            if self._use_vm is True:
+                r_hd_binding = self._get_router_binding_info(e_context, id)
+                self._add_type_and_hosting_device_info(
+                    e_context, router, binding_info=r_hd_binding, schedule=False)
+                if router_db.gw_port is not None:
+                    p_drv = self.get_hosting_device_plugging_driver()
+                    if p_drv is not None:
+                        p_drv.teardown_logical_port_connectivity(e_context,
                                                              router_db.gw_port)
-            # conditionally remove router from backlog just to be sure
-            self.remove_router_from_backlog(id)
-            if router['hosting_device'] is not None:
-                self.unschedule_router_from_hosting_device(context,
-                                                           r_hd_binding)
+                
+                        # conditionally remove router from backlog just to be sure
+                        self.remove_router_from_backlog(id)
+                        if router['hosting_device'] is not None:
+                            self.unschedule_router_from_hosting_device(context,
+                                                                       r_hd_binding)
             super(L3RouterApplianceDBMixin, self).delete_router(context, id)
         self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
@@ -305,6 +317,12 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         with context.session.begin(subtransactions=True):
             sync_data = (super(L3RouterApplianceDBMixin, self).
                          get_sync_data(context, router_ids, active))
+
+            if self._use_vm is False:
+                for router in sync_data:
+                    self._add_type_and_hosting_device_info(context, router)
+                return sync_data
+
             for router in sync_data:
                 self._add_type_and_hosting_device_info(context, router)
                 plg_drv = self.get_hosting_device_plugging_driver()
@@ -366,10 +384,17 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         # try to reschedule
         for r_id, router in self._backlogged_routers.items():
             self._add_type_and_hosting_device_info(context, router)
-            if router.get('hosting_device'):
-                # scheduling attempt succeeded
+
+            if self._use_vm is True:
+                if router.get('hosting_device'):
+                    # scheduling attempt succeeded
+                    scheduled_routers.append(router)
+                    self._backlogged_routers.pop(r_id, None)
+            else:
                 scheduled_routers.append(router)
                 self._backlogged_routers.pop(r_id, None)
+
+
         # notify cfg agents so the scheduled routers are instantiated
         if scheduled_routers:
             self.l3_cfg_rpc_notifier.routers_updated(context,
@@ -428,6 +453,15 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
     def _add_type_and_hosting_device_info(self, context, router,
                                           binding_info=None, schedule=True):
         """Adds type and hosting device information to a router."""
+        if self._use_vm is False:
+            LOG.debug("_add_type_and_hosting_device_info router:%s" % router)
+            router['router_type'] = {'id': None,
+                                     'name': 'CSR1kv_router',
+                                     'cfg_agent_driver': (cfg.CONF.hosting_devices
+                                                          .csr1kv_cfgagent_router_driver)}
+            router['hosting_device'] = self._get_router_info_for_agent(router)
+            return
+
         try:
             if binding_info is None:
                 binding_info = self._get_router_binding_info(context,
@@ -452,6 +486,27 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         else:
             router['hosting_device'] = self.get_device_info_for_agent(
                 binding_info.hosting_device)
+
+    def _get_router_info_for_agent(self, router):
+        """Returns information about <router> needed by config agent.
+
+            Convenience function that service plugins can use to populate
+            their resources with information about the device hosting their
+            logical resource.
+        """
+        LOG.debug("_get_router_info_for_agent router:%s" % router)
+        credentials = {'username': cfg.CONF.hosting_devices.csr1kv_username,
+                       'password': cfg.CONF.hosting_devices.csr1kv_password}
+        #mgmt_ip = (hosting_device.management_port['fixed_ips'][0]['ip_address']
+        #           if hosting_device.management_port else None)
+        mgmt_ip = "1.1.1.1"
+        return {'id': router['id'],
+                'credentials': credentials,
+                'management_ip_address': mgmt_ip,
+                'protocol_port': 443,
+                'created_at': str("AAA"),
+                'booting_time': 10,
+                'cfg_agent_id': 0}
 
     def _add_hosting_port_info(self, context, router, plugging_driver):
         """Adds hosting port information to router ports.
@@ -547,6 +602,14 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
             context, c_const.AGENT_TYPE_CFG, host)
         if not agent.admin_state_up:
             return []
+
+        if self._use_vm is False:
+            if router_ids:
+                return self.get_sync_data_ext(context, router_ids=router_ids,
+                                              active=True)
+            else:
+                return []
+            
         query = context.session.query(
             l3_models.RouterHostingDeviceBinding.router_id)
         query = query.join(l3_models.HostingDevice)
