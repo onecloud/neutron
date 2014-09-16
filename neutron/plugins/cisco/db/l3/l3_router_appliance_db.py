@@ -150,11 +150,12 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
                         p_drv.teardown_logical_port_connectivity(e_context,
                                                              router_db.gw_port)
                 
-                        # conditionally remove router from backlog just to be sure
-                        self.remove_router_from_backlog(id)
-                        if router['hosting_device'] is not None:
-                            self.unschedule_router_from_hosting_device(context,
-                                                                       r_hd_binding)
+                # conditionally remove router from backlog just to be sure
+                self.remove_router_from_backlog(id)
+                if router['hosting_device'] is not None:
+                    self.unschedule_router_from_hosting_device(context,
+                                                               r_hd_binding)
+
             super(L3RouterApplianceDBMixin, self).delete_router(context, id)
         self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
