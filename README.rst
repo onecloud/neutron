@@ -1,6 +1,19 @@
 ## cisco plugin icehouse backport notes ##
 
-1.)
+1.) Make sure you have ciscoconfparse python library:
+
+pip install ciscoconfparse
+
+This has also been added to the requirements.txt.
+
+2.) Download and install ncclient from:
+
+https://github.com/jon-wei/ncclient.git
+
+3.)
+python setup.py install
+
+4.)
 Define keystone_authtoken.identity_uri in neutron.conf. This is needed by a db module in the cisco plugin.
 
 [keystone_authtoken]
@@ -9,8 +22,7 @@ auth_port = 35357
 ...
 identity_uri=http://127.0.0.1:35357
 
-2.)
-
+5.)
 Set CiscoRouterPlugin as a service plugin:
 
 service_plugins = neutron.plugins.cisco.service_plugins.cisco_router_plugin.CiscoRouterPlugin,neutron.services.firewall.fwaas_plugin.FirewallPlugin
