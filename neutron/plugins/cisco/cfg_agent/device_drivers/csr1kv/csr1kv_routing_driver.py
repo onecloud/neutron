@@ -251,6 +251,14 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         time, driver will enable all other interfaces and keep that status in
         the `_intfs_enabled` flag.
         """
+        
+        #hack
+        self._csr_host = "10.1.10.252"
+        self._csr_ssh_port = 22
+        self._csr_user = "admin"
+        self._csr_password = "!cisco123"
+        self._timeout = 30
+
         try:
             if self._csr_conn and self._csr_conn.connected:
                 return self._csr_conn
@@ -259,10 +267,14 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
                                                  port=self._csr_ssh_port,
                                                  username=self._csr_user,
                                                  password=self._csr_password,
-                                                 device_params={'name': "csr"},
+                                                 allow_agent=False,
+                                                 look_for_keys=False,
+                                                 #device_params={'name': "csr"},
                                                  timeout=self._timeout)
                 if not self._intfs_enabled:
-                    self._intfs_enabled = self._enable_intfs(self._csr_conn)
+                    #self._intfs_enabled = self._enable_intfs(self._csr_conn)
+                    self._intfs_enabled = True
+
             return self._csr_conn
         except Exception as e:
             conn_params = {'host': self._csr_host, 'port': self._csr_ssh_port,
