@@ -27,6 +27,12 @@ Set CiscoRouterPlugin as a service plugin:
 
 service_plugins = neutron.plugins.cisco.service_plugins.cisco_router_plugin.CiscoRouterPlugin,neutron.services.firewall.fwaas_plugin.FirewallPlugin
 
+6.)
+
+To change login credentials/target router ip:
+
+def _get_connection(self):
+in neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv.csr1kv_routing_driver
 
 
 ----------------------------------
