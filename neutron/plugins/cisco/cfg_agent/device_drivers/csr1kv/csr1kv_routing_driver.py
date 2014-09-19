@@ -48,6 +48,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     """
 
     DEV_NAME_LEN = 14
+    _use_vm = False
 
     def __init__(self, **device_params):
         try:
@@ -121,10 +122,18 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
         gateway_ip = ip_cidr.split('/')[0]
-        subinterface = self._get_interface_name_from_hosting_port(port)
-        vlan = self._get_interface_vlan_from_hosting_port(port)
-        self._create_subinterface(subinterface, vlan, vrf_name,
-                                  gateway_ip, netmask)
+        
+        if self._use_vm is False:
+            vlan = self._get_interface_vlan_from_hosting_port(port)
+            subinterface = port['hosting_info']['hosting_port_name']
+            subinterface = "%s.%s" % (subinterface, vlan)
+            self._create_subinterface(subinterface, vlan, vrf_name,
+                                      gateway_ip, netmask)
+        else:
+            subinterface = self._get_interface_name_from_hosting_port(port)
+            vlan = self._get_interface_vlan_from_hosting_port(port)
+            self._create_subinterface(subinterface, vlan, vrf_name,
+                                      gateway_ip, netmask)
 
     def _csr_remove_subinterface(self, port):
         subinterface = self._get_interface_name_from_hosting_port(port)

@@ -322,6 +322,8 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
             if self._use_vm is False:
                 for router in sync_data:
                     self._add_type_and_hosting_device_info(context, router)
+                    self._add_hosting_port_info(context, router, None)
+
                 return sync_data
 
             for router in sync_data:
@@ -518,6 +520,19 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         """
         # cache of hosting port information: {mac_addr: {'name': port_name}}
         hosting_pdata = {}
+
+        if self._use_vm is False:
+            if router['external_gateway_info'] is not None:
+                self._get_hosting_info_for_port_no_vm(context, 
+                                                      router['id'], router['gw_port'],
+                                                      hosting_pdata)
+            for itfc in router.get(l3_constants.INTERFACE_KEY, []):
+                self._get_hosting_info_for_port_no_vm(context, 
+                                                      router['id'], itfc,
+                                                      hosting_pdata)
+            return
+                
+        
         if router['external_gateway_info'] is not None:
             h_info, did_allocation = self._populate_hosting_info_for_port(
                 context, router['id'], router['gw_port'],
@@ -526,6 +541,25 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
             h_info, did_allocation = self._populate_hosting_info_for_port(
                 context, router['id'], itfc, router['hosting_device'],
                 hosting_pdata, plugging_driver)
+
+    def _get_hosting_info_for_port_no_vm(self, context, router_id, port, hosting_pdata):
+        port_db = self._core_plugin._get_port(context, port['id'])
+        tags = self._core_plugin.get_networks(context,
+                                              {'id': [port_db['network_id']]},
+                                              [pr_net.SEGMENTATION_ID])
+        allocated_vlan = (None if tags == []
+                          else tags[0].get(pr_net.SEGMENTATION_ID))
+
+        if hosting_pdata.get('mac') is None:
+            hosting_pdata['mac'] = "2c54:2d45:bbc9"
+            hosting_pdata['name'] = "Port-channel10"
+
+        port['hosting_info'] = {'hosting_port_id': 111,
+                                'segmentation_id': allocated_vlan,
+                                # 'hosting_mac': "2c54:2d45:bbc9",
+                                # 'hosting_port_name': "Port-channel10"}
+                                'hosting_mac': hosting_pdata['mac'],
+                                'hosting_port_name': hosting_pdata['name']}
 
     def _populate_hosting_info_for_port(self, context, router_id, port,
                                         hosting_device, hosting_pdata,
