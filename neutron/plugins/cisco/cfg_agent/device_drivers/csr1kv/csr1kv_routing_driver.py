@@ -125,8 +125,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         
         if self._use_vm is False:
             vlan = self._get_interface_vlan_from_hosting_port(port)
-            subinterface = port['hosting_info']['hosting_port_name']
-            subinterface = "%s.%s" % (subinterface, vlan)
+            subinterface = self._get_interface_name_from_hosting_port_no_vm(port)
             self._create_subinterface(subinterface, vlan, vrf_name,
                                       gateway_ip, netmask)
         else:
@@ -136,8 +135,12 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
                                       gateway_ip, netmask)
 
     def _csr_remove_subinterface(self, port):
-        subinterface = self._get_interface_name_from_hosting_port(port)
-        self._remove_subinterface(subinterface)
+        if self._use_vm is False:
+            subinterface = self._get_interface_name_from_hosting_port_no_vm(port)
+            self._remove_subinterface(subinterface)
+        else:
+            subinterface = self._get_interface_name_from_hosting_port(port)
+            self._remove_subinterface(subinterface)
 
     def _csr_add_ha(self, ri, port):
         func_dict = {
@@ -174,8 +177,12 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
-        inner_intfc = self._get_interface_name_from_hosting_port(port)
-        outer_intfc = self._get_interface_name_from_hosting_port(ex_port)
+        if self._use_vm is False:
+            inner_intfc = self._get_interface_name_from_hosting_port_no_vm(port)
+            outer_intfc = self._get_interface_name_from_hosting_port_no_vm(ex_port)
+        else:
+            inner_intfc = self._get_interface_name_from_hosting_port(port)
+            outer_intfc = self._get_interface_name_from_hosting_port(ex_port)
         self._nat_rules_for_internet_access(acl_no, internal_net,
                                             netmask, inner_intfc,
                                             outer_intfc, vrf_name)
@@ -184,7 +191,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         acls = []
         #First disable nat in all inner ports
         for port in ports:
-            in_intfc_name = self._get_interface_name_from_hosting_port(port)
+            if self.use_vm is False:
+                in_intfc_name = self._get_interface_name_from_hosting_port(port)
+            else:
+                in_intfc_name = self._get_interface_name_from_hosting_port_no_vm(port)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
             acls.append("acl_" + str(inner_vlan))
             self._remove_interface_nat(in_intfc_name, 'inside')
@@ -198,7 +208,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
         # Remove dynamic NAT rules and ACLs
         vrf_name = self._csr_get_vrf_name(ri)
-        ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port)
+        if self.use_vm is False:
+            ext_intfc_name = self._get_interface_name_from_hosting_port_no_vm(ex_port)
+        else:
+            ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port)
         for acl in acls:
             self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name)
 
@@ -295,6 +308,12 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         vlan = self._get_interface_vlan_from_hosting_port(port)
         int_no = self._get_interface_no_from_hosting_port(port)
         intfc_name = 'GigabitEthernet%s.%s' % (int_no, vlan)
+        return intfc_name
+
+    def _get_interface_name_from_hosting_port_no_vm(self, port):
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        subinterface = port['hosting_info']['hosting_port_name']
+        intfc_name = "%s.%s" % (subinterface, vlan)
         return intfc_name
 
     @staticmethod
