@@ -75,7 +75,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._csr_remove_vrf(ri)
 
     def internal_network_added(self, ri, port):
-        self._csr_create_subinterface(ri, port)
+        self._csr_create_subinterface(ri, port. False)
         if port.get('ha_info') is not None and ri.ha_info['ha:enabled']:
             self._csr_add_ha(ri, port)
 
@@ -83,7 +83,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._csr_remove_subinterface(port)
 
     def external_gateway_added(self, ri, ex_gw_port):
-        self._csr_create_subinterface(ri, ex_gw_port)
+        self._csr_create_subinterface(ri, ex_gw_port, True)
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip:
             #Set default route via this network's gateway ip
@@ -117,7 +117,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     ##### Internal Functions  ####
 
-    def _csr_create_subinterface(self, ri, port):
+    def _csr_create_subinterface(self, ri, port, is_external):
         vrf_name = self._csr_get_vrf_name(ri)
         ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
@@ -125,7 +125,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         subinterface = self._get_interface_name_from_hosting_port(port)
         vlan = self._get_interface_vlan_from_hosting_port(port)
         self._create_subinterface(subinterface, vlan, vrf_name,
-                                  gateway_ip, netmask)
+                                  gateway_ip, netmask. is_external)
 
     def _csr_remove_subinterface(self, port):
         subinterface = self._get_interface_name_from_hosting_port(port)
@@ -501,11 +501,16 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         else:
             LOG.warning(_("VRF %s not present"), vrf_name)
 
-    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask):
+    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask. is_external):
         if vrf_name not in self._get_vrfs():
             LOG.error(_("VRF %s not present"), vrf_name)
-        confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
-                                                  vrf_name, ip, mask)
+        if is_external is True:
+            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
+                                                               vrf_name, ip, mask)
+        else:
+            confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
+                                                      vrf_name, ip, mask)
+            
         self._edit_running_config(confstr, 'CREATE_SUBINTERFACE')
 
     def _remove_subinterface(self, subinterface):
@@ -568,8 +573,13 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
 
-        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                    vrf_name)
+        if self._use_vm is False:
+            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, inner_intfc,
+                                                        vrf_name)
+        else:
+            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                        vrf_name)
+
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'CREATE_SNAT')
 
@@ -615,13 +625,20 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _add_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
-        confstr = snippets.SET_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
+        if self._use_vm is False:
+            confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        else:
+            confstr = snippets.SET_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'SET_STATIC_SRC_TRL')
 
     def _remove_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
-        confstr = snippets.REMOVE_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
+        if self._use_vm is False:
+            confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        else:
+            confstr = snippets.REMOVE_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
+
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'REMOVE_STATIC_SRC_TRL')
 

@@ -106,6 +106,24 @@ CREATE_SUBINTERFACE = """
 """
 
 #=================================================#
+# Create Subinterface (External. no VRF)
+# $(config)interface GigabitEthernet 2.500
+# $(config)encapsulation dot1Q 500
+# $(config)ip address 192.168.0.1 255.255.255.0
+#=================================================#
+CREATE_SUBINTERFACE_EXTERNAL = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>encapsulation dot1Q %s</cmd>
+            <cmd>ip address %s %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+
+#=================================================#
 # Remove Subinterface
 # $(config)no interface GigabitEthernet 2.500
 #=================================================#
@@ -273,6 +291,38 @@ REMOVE_STATIC_SRC_TRL = """
 <config>
         <cli-config-data>
             <cmd>no ip nat inside source static %s %s vrf %s match-in-vrf</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Set Static source translation on an interface
+# Syntax: ip nat inside source static <fixed_ip> <floating_ip>
+# .......vrf <vrf_name> match-in-vrf
+# eg: $(config)ip nat inside source static 192.168.0.1 121.158.0.5
+#    ..........vrf nrouter-e7d4y5 match-in-vrf
+#========================================================================#
+SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat inside source static %s %s vrf %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Remove Static source translation on an interface
+# Syntax: no ip nat inside source static <fixed_ip> <floating_ip>
+# .......vrf <vrf_name> match-in-vrf
+# eg: $(config)no ip nat inside source static 192.168.0.1 121.158.0.5
+#    ..........vrf nrouter-e7d4y5 match-in-vrf
+#========================================================================#
+REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat inside source static %s %s vrf %s</cmd>
         </cli-config-data>
 </config>
 
