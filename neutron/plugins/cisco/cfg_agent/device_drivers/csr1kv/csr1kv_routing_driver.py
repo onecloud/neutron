@@ -75,7 +75,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._csr_remove_vrf(ri)
 
     def internal_network_added(self, ri, port):
-        self._csr_create_subinterface(ri, port. False)
+        self._csr_create_subinterface(ri, port, False)
         if port.get('ha_info') is not None and ri.ha_info['ha:enabled']:
             self._csr_add_ha(ri, port)
 
@@ -125,7 +125,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         subinterface = self._get_interface_name_from_hosting_port(port)
         vlan = self._get_interface_vlan_from_hosting_port(port)
         self._create_subinterface(subinterface, vlan, vrf_name,
-                                  gateway_ip, netmask. is_external)
+                                  gateway_ip, netmask, is_external)
 
     def _csr_remove_subinterface(self, port):
         subinterface = self._get_interface_name_from_hosting_port(port)
