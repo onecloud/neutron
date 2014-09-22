@@ -36,6 +36,8 @@ from neutron.plugins.cisco.common import cisco_constants as c_const
 from neutron.plugins.cisco.db.l3 import l3_models
 from neutron.plugins.cisco.l3.rpc import l3_router_rpc_joint_agent_api
 
+from neutron.openstack.common.notifier import api as notifier_api
+
 LOG = logging.getLogger(__name__)
 
 
@@ -165,10 +167,17 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
         self.l3_cfg_rpc_notifier.routers_updated(context, routers, l3_method)
 
         mapping = {'add': 'create', 'remove': 'delete'}
-        notifier = n_rpc.get_notifier('network')
+        # notifier = n_rpc.get_notifier('network')
         router_event = 'router.interface.%s' % mapping[action]
-        notifier.info(context, router_event,
-                      {'router_interface': router_interface_info})
+        # notifier.info(context, router_event,
+        #               {'router_interface': router_interface_info})
+      
+        # ICEHOUSE_BACKPORT
+        notifier_api.notify(context,
+                            notifier_api.publisher_id('network'),
+                            router_event,
+                            notifier_api.CONF.default_notification_level,
+                            {'router_interface': router_interface_info})
 
     def add_router_interface(self, context, router_id, interface_info):
         with context.session.begin(subtransactions=True):
