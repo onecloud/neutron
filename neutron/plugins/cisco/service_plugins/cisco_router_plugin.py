@@ -28,10 +28,11 @@ from neutron.plugins.cisco.l3.rpc import devices_cfgagent_rpc_cb as devices_rpc
 from neutron.plugins.common import constants
 
 from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
-
+from neutron.db import l3_rpc_base 
 
 # class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
 class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
+                                    l3_rpc_base.L3RpcCallbackMixin,
                                     devices_rpc.DeviceCfgRpcCallbackMixin):
     RPC_API_VERSION = '1.1'
 
