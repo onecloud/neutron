@@ -506,7 +506,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             LOG.error(_("VRF %s not present"), vrf_name)
         if is_external is True:
             confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
-                                                               vrf_name, ip, mask)
+                                                               ip, mask)
         else:
             confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
                                                       vrf_name, ip, mask)
