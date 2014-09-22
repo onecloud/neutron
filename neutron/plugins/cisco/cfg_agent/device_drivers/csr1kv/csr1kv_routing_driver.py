@@ -501,7 +501,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         else:
             LOG.warning(_("VRF %s not present"), vrf_name)
 
-    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask. is_external):
+    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, is_external):
         if vrf_name not in self._get_vrfs():
             LOG.error(_("VRF %s not present"), vrf_name)
         if is_external is True:
