@@ -90,6 +90,8 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             self._timeout = device_params['booting_time']
             self._csr_conn = None
             self._intfs_enabled = False
+
+            self._asr_config = ASRConfigInfo()
         except KeyError as e:
             LOG.error(_("Missing device parameter:%s. Aborting "
                         "CSR1kvRoutingDriver initialization"), e)
