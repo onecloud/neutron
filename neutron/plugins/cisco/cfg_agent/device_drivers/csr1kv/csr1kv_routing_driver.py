@@ -37,6 +37,34 @@ LOG = logging.getLogger(__name__)
 T1_PORT_NAME_PREFIX = 't1_p:'  # T1 port/network is for VXLAN
 T2_PORT_NAME_PREFIX = 't2_p:'  # T2 port/network is for VLAN
 
+class ASRConfigInfo(object):
+    """ML2 Mechanism Driver Cisco Configuration class."""
+    asr_dict = {}
+
+    def __init__(self):
+        self._create_asr_device_dictionary()
+
+    def _create_asr_device_dictionary(self):
+        """Create the ML2 device cisco dictionary.
+
+        Read data from the cisco_router_plugin.ini device supported sections.
+        """
+        multi_parser = cfg.MultiConfigParser()
+        read_ok = multi_parser.read(cfg.CONF.config_file)
+
+        if len(read_ok) != len(cfg.CONF.config_file):
+            raise cfg.Error(_("Some config files were not parsed properly"))
+
+        for parsed_file in multi_parser.parsed:
+            for parsed_item in parsed_file.keys():
+                dev_id, sep, dev_ip = parsed_item.partition(':')
+                if dev_id.lower() == 'asr':
+                    for dev_key, value in parsed_file[parsed_item].items():
+                        self.asr_dict[dev_ip, dev_key] = value[0]
+
+        LOG.error("ASR dict: %s" % self.asr_dict)
+
+
 
 class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     """CSR1kv Routing Driver.
@@ -92,7 +120,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def external_gateway_removed(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip:
-            #Remove default route via this network's gateway ip
+            #Remove default route via this network's gateway i
             self._csr_remove_default_route(ri, ex_gw_ip)
         #Finally, remove external network subinterface
         self._csr_remove_subinterface(ex_gw_port)
