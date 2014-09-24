@@ -682,3 +682,114 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
                                           active=True)
         else:
             return []
+
+
+
+class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
+    
+    def create_router(self, context, router):
+        with context.session.begin(subtransactions=True):
+            router_created = (super(L3RouterApplianceDBMixin, self).
+                              create_router(context, router))
+            self.backlog_router(router_created)  # backlog or start immediatey?
+        return router_created
+
+
+    def update_router(self, context, id, router):
+        r = router['router']
+        # Check if external gateway has changed so we may have to
+        # update trunking
+        o_r_db = self._get_router(context, id)
+        old_ext_gw = (o_r_db.gw_port or {}).get('network_id')
+        new_ext_gw = (r.get('external_gateway_info', {}) or {}).get(
+            'network_id')
+        with context.session.begin(subtransactions=True):
+            e_context = context.elevated()
+            if old_ext_gw is not None and old_ext_gw != new_ext_gw:
+                o_r = self._make_router_dict(o_r_db, process_extensions=False)
+                # no need to schedule now since we're only doing this to
+                # tear-down connectivity and there won't be any if not
+                # already scheduled.
+                self._add_type_and_hosting_device_info(e_context, o_r,
+                                                       schedule=False)
+            router_updated = (
+                super(L3RouterApplianceDBMixin, self).update_router(
+                    context, id, router))
+            routers = [copy.deepcopy(router_updated)]
+            self._add_type_and_hosting_device_info(e_context, routers[0])
+
+        self.l3_cfg_rpc_notifier.routers_updated(context, routers)
+        return router_updated
+
+    def delete_router(self, context, id):
+        router_db = self._get_router(context, id)
+        router = self._make_router_dict(router_db)
+        with context.session.begin(subtransactions=True):
+            super(L3RouterApplianceDBMixin, self).delete_router(context, id)
+        self.l3_cfg_rpc_notifier.router_deleted(context, router)
+
+
+    def get_sync_data_ext(self, context, router_ids=None, active=None):
+        """Query routers and their related floating_ips, interfaces.
+
+        Adds information about hosting device as well as trunking.
+        """
+        with context.session.begin(subtransactions=True):
+            sync_data = (super(L3RouterApplianceDBMixin, self).
+                         get_sync_data(context, router_ids, active))
+
+            for router in sync_data:
+                self._add_type_and_hosting_device_info(context, router)
+                self._add_hosting_port_info(context, router, None)
+
+            return sync_data
+
+    @lockutils.synchronized('routerbacklog', 'neutron-')
+    def _process_backlogged_routers(self):
+        if self._refresh_router_backlog:
+            self._sync_router_backlog()
+        if not self._backlogged_routers:
+            return
+        context = n_context.get_admin_context()
+        scheduled_routers = []
+        LOG.info(_('Processing router (scheduling) backlog'))
+        # try to reschedule
+        for r_id, router in self._backlogged_routers.items():
+            self._add_type_and_hosting_device_info(context, router)
+
+            scheduled_routers.append(router)
+            self._backlogged_routers.pop(r_id, None)
+
+        # notify cfg agents so the scheduled routers are instantiated
+        if scheduled_routers:
+            self.l3_cfg_rpc_notifier.routers_updated(context,
+                                                     scheduled_routers)
+
+
+    def _add_type_and_hosting_device_info(self, context, router,
+                                          binding_info=None, schedule=True):
+        """Adds type and hosting device information to a router."""
+        LOG.debug("_add_type_and_hosting_device_info router:%s" % router)
+        router['router_type'] = {'id': None,
+                                 'name': 'CSR1kv_router',
+                                 'cfg_agent_driver': (cfg.CONF.hosting_devices
+                                                      .csr1kv_cfgagent_router_driver)}
+        router['hosting_device'] = self._get_router_info_for_agent(router)
+        return
+
+
+
+    def list_active_sync_routers_on_hosting_devices(self, context, host,
+                                                    router_ids=None,
+                                                    hosting_device_ids=None):
+        agent = self._get_agent_by_type_and_host(
+            context, c_const.AGENT_TYPE_CFG, host)
+        if not agent.admin_state_up:
+            return []
+
+        if router_ids:
+            return self.get_sync_data_ext(context, router_ids=router_ids,
+                                          active=True)
+        else:
+            return []
+   
