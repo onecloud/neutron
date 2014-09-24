@@ -726,12 +726,12 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         if router['external_gateway_info'] is not None:
             self._get_hosting_info_for_port_no_vm(context, 
                                                   router['id'], router['gw_port'],
-                                                  router['hosting_device'], hosting_pdata)
+                                                  hosting_pdata)
 
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
             self._get_hosting_info_for_port_no_vm(context,
                                                   router['id'], itfc, 
-                                                  router['hosting_device'], hosting_pdata)
+                                                  hosting_pdata)
 
     def _get_hosting_info_for_port_no_vm(self, context, router_id, port, hosting_pdata):
         port_db = self._core_plugin._get_port(context, port['id'])
