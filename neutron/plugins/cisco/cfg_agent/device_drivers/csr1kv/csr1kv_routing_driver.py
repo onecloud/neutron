@@ -881,6 +881,12 @@ on which the code can call get_config, edit_config
 Make a class with get_config/edit_config interface that talks to multiple boxes internally
 
 Change _get_connection to use this class, etc.
+
+http://tools.ietf.org/html/rfc6241#appendix-E.2
+Netconf doesn't really have multi-node transcations built-in
+Need to config lock the nodes, apply config, and then deal with partial failure
+  i.e. retry later or undo the partial config, then release cfg locks
+
 '''
 class MultiConnectionManager(object):
     def __init__(self):
