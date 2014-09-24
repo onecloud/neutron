@@ -781,7 +781,6 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
     def _get_interface_name_from_hosting_port(self, port):
         vlan = self._get_interface_vlan_from_hosting_port(port)
         # subinterface = port['hosting_info']['hosting_port_name']
-        # this is a hack, do proper mapping later
         asr_entry = self._asr_config.get_first_asr()
         subinterface = asr_entry['target_intf']
         intfc_name = "%s.%s" % (subinterface, vlan)
@@ -837,14 +836,6 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
            refer to comments in parent class
         """
         asr_entry = self._asr_config.get_first_asr()
-        LOG.error("RRRRRRRRRR: asr_entry: %s" % asr_entry)
-
-        #hack
-        #self._csr_host = "10.1.10.252"
-        #self._csr_ssh_port = 22
-        #self._csr_user = "admin"
-        #self._csr_password = "!cisco123"
-        #self._timeout = 30
 
         self._csr_host = asr_entry['ip']
         self._csr_ssh_port = asr_entry['ssh_port']
