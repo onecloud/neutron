@@ -731,7 +731,7 @@ class ASR1kConfigInfo(object):
         LOG.error("ASR dict: %s" % self.asr_dict)
 
     def get_first_asr(self):
-        return self.asr_dict.values[0]
+        return self.asr_dict.values()[0]
 
 
 class ASR1kRoutingDriver(CSR1kvRoutingDriver):
