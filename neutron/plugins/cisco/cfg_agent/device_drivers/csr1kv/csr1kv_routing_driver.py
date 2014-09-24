@@ -703,8 +703,6 @@ class ASR1kConfigInfo(object):
 
     def __init__(self):
         self._create_asr_device_dictionary()
-        self._csr_conn = None
-        self._intfs_enabled = False
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -721,16 +719,27 @@ class ASR1kConfigInfo(object):
             for parsed_item in parsed_file.keys():
                 dev_id, sep, dev_ip = parsed_item.partition(':')
                 if dev_id.lower() == 'asr':
+                    if dev_ip not in self.asr_dict:
+                        self.asr_dict[dev_ip] = {}
+                
+                    asr_entry = self.asr_dict[dev_ip]
+                    asr_entry['ip'] = dev_ip
+
                     for dev_key, value in parsed_file[parsed_item].items():
-                        self.asr_dict[dev_ip, dev_key] = value[0]
+                        asr_entry[dev_key] = value[0]
 
         LOG.error("ASR dict: %s" % self.asr_dict)
+
+    def get_first_asr(self):
+        return self.asr_dict.values[0]
 
 
 class ASR1kRoutingDriver(CSR1kvRoutingDriver):
 
     def __init__(self, **device_params):
         self._asr_config = ASR1kConfigInfo()
+        self._csr_conn = None
+        self._intfs_enabled = False
         return
 
     def internal_network_added(self, ri, port):
@@ -824,7 +833,9 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
            
            refer to comments in parent class
         """
-        
+        asr_entry = self._asr_config.get_first_asr()
+        LOG.error("RRRRRRRRRR: asr_entry: %s" % asr_entry)
+
         #hack
         self._csr_host = "10.1.10.252"
         self._csr_ssh_port = 22
