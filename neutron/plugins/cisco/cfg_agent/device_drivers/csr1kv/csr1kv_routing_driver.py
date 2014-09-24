@@ -750,17 +750,22 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
             self._csr_add_ha(ri, port)
 
     def external_gateway_added(self, ri, ex_gw_port):
-        self._csr_create_subinterface(ri, ex_gw_port, True)
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+        self._csr_create_subinterface(ri, ex_gw_port, True, ex_gw_ip)
         if ex_gw_ip:
             #Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
 
-    def _csr_create_subinterface(self, ri, port, is_external=False):
+    def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
         vrf_name = self._csr_get_vrf_name(ri)
         ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
-        gateway_ip = ip_cidr.split('/')[0]
+        
+        if is_external is True:
+            gateway_ip = gw_ip
+        else:
+            gateway_ip = ip_cidr.split('/')[0]
+        
         subinterface = self._get_interface_name_from_hosting_port(port)
         vlan = self._get_interface_vlan_from_hosting_port(port)
         self._create_subinterface(subinterface, vlan, vrf_name,
