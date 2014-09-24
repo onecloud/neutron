@@ -850,6 +850,7 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
         self._csr_ssh_port = asr_entry['ssh_port']
         self._csr_user = asr_entry['username']
         self._csr_password = asr_entry['password']
+        self._timeout = 30
 
         try:
             if self._csr_conn and self._csr_conn.connected:
