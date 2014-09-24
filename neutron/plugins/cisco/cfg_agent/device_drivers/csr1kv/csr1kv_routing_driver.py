@@ -847,7 +847,7 @@ class ASR1kRoutingDriver(CSR1kvRoutingDriver):
         #self._timeout = 30
 
         self._csr_host = asr_entry['ip']
-        self._csr_ssh_port = asr_entry['csr']
+        self._csr_ssh_port = asr_entry['ssh_port']
         self._csr_user = asr_entry['username']
         self._csr_password = asr_entry['password']
 
