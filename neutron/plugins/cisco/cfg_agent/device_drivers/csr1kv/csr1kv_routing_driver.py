@@ -37,35 +37,6 @@ LOG = logging.getLogger(__name__)
 T1_PORT_NAME_PREFIX = 't1_p:'  # T1 port/network is for VXLAN
 T2_PORT_NAME_PREFIX = 't2_p:'  # T2 port/network is for VLAN
 
-class ASRConfigInfo(object):
-    """ML2 Mechanism Driver Cisco Configuration class."""
-    asr_dict = {}
-
-    def __init__(self):
-        self._create_asr_device_dictionary()
-
-    def _create_asr_device_dictionary(self):
-        """Create the ML2 device cisco dictionary.
-
-        Read data from the cisco_router_plugin.ini device supported sections.
-        """
-        multi_parser = cfg.MultiConfigParser()
-        read_ok = multi_parser.read(cfg.CONF.config_file)
-
-        if len(read_ok) != len(cfg.CONF.config_file):
-            raise cfg.Error(_("Some config files were not parsed properly"))
-
-        for parsed_file in multi_parser.parsed:
-            for parsed_item in parsed_file.keys():
-                dev_id, sep, dev_ip = parsed_item.partition(':')
-                if dev_id.lower() == 'asr':
-                    for dev_key, value in parsed_file[parsed_item].items():
-                        self.asr_dict[dev_ip, dev_key] = value[0]
-
-        LOG.error("ASR dict: %s" % self.asr_dict)
-
-
-
 class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     """CSR1kv Routing Driver.
 
@@ -86,12 +57,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             if credentials:
                 self._csr_user = credentials['username']
                 self._csr_password = credentials['password']
-            # self._timeout = cfg.CONF.device_connection_timeout
+            #self._timeout = cfg.CONF.device_connection_timeout
             self._timeout = device_params['booting_time']
             self._csr_conn = None
             self._intfs_enabled = False
-
-            self._asr_config = ASRConfigInfo()
         except KeyError as e:
             LOG.error(_("Missing device parameter:%s. Aborting "
                         "CSR1kvRoutingDriver initialization"), e)
@@ -147,7 +116,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     ##### Internal Functions  ####
 
-    def _csr_create_subinterface(self, ri, port, is_external):
+    def _csr_create_subinterface(self, ri, port):
         vrf_name = self._csr_get_vrf_name(ri)
         ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
@@ -155,7 +124,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         subinterface = self._get_interface_name_from_hosting_port(port)
         vlan = self._get_interface_vlan_from_hosting_port(port)
         self._create_subinterface(subinterface, vlan, vrf_name,
-                                  gateway_ip, netmask, is_external)
+                                  gateway_ip, netmask)
 
     def _csr_remove_subinterface(self, port):
         subinterface = self._get_interface_name_from_hosting_port(port)
@@ -282,13 +251,6 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         time, driver will enable all other interfaces and keep that status in
         the `_intfs_enabled` flag.
         """
-        
-        #hack
-        self._csr_host = "10.1.10.252"
-        self._csr_ssh_port = 22
-        self._csr_user = "admin"
-        self._csr_password = "!cisco123"
-        self._timeout = 30
 
         try:
             if self._csr_conn and self._csr_conn.connected:
@@ -298,12 +260,10 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
                                                  port=self._csr_ssh_port,
                                                  username=self._csr_user,
                                                  password=self._csr_password,
-                                                 allow_agent=False,
-                                                 look_for_keys=False,
-                                                 #device_params={'name': "csr"},
+                                                 device_params={'name': "csr"},
                                                  timeout=self._timeout)
                 if not self._intfs_enabled:
-                    #self._intfs_enabled = self._enable_intfs(self._csr_conn)
+                    self._intfs_enabled = self._enable_intfs(self._csr_conn)
                     self._intfs_enabled = True
 
             return self._csr_conn
@@ -314,18 +274,9 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             raise cfg_exc.CSR1kvConnectionException(**conn_params)
 
     def _get_interface_name_from_hosting_port(self, port):
-        if self._use_vm is False:
-            return self._get_interface_name_from_hosting_port_no_vm(port)
-
         vlan = self._get_interface_vlan_from_hosting_port(port)
         int_no = self._get_interface_no_from_hosting_port(port)
         intfc_name = 'GigabitEthernet%s.%s' % (int_no, vlan)
-        return intfc_name
-
-    def _get_interface_name_from_hosting_port_no_vm(self, port):
-        vlan = self._get_interface_vlan_from_hosting_port(port)
-        subinterface = port['hosting_info']['hosting_port_name']
-        intfc_name = "%s.%s" % (subinterface, vlan)
         return intfc_name
 
     @staticmethod
@@ -531,16 +482,11 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         else:
             LOG.warning(_("VRF %s not present"), vrf_name)
 
-    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, is_external):
+    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask):
         if vrf_name not in self._get_vrfs():
             LOG.error(_("VRF %s not present"), vrf_name)
-        if is_external is True:
-            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
-                                                               ip, mask)
-        else:
-            confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
+        confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
                                                       vrf_name, ip, mask)
-            
         self._edit_running_config(confstr, 'CREATE_SUBINTERFACE')
 
     def _remove_subinterface(self, subinterface):
@@ -603,12 +549,9 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
 
-        if self._use_vm is False:
-            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, inner_intfc,
-                                                        vrf_name)
-        else:
-            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                        vrf_name)
+
+        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                    vrf_name)
 
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'CREATE_SNAT')
@@ -655,20 +598,13 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _add_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
-        if self._use_vm is False:
-            confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
-        else:
-            confstr = snippets.SET_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
+        confstr = snippets.SET_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'SET_STATIC_SRC_TRL')
 
     def _remove_floating_ip(self, floating_ip, fixed_ip, vrf):
         conn = self._get_connection()
-        if self._use_vm is False:
-            confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
-        else:
-            confstr = snippets.REMOVE_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
-
+        confstr = snippets.REMOVE_STATIC_SRC_TRL % (fixed_ip, floating_ip, vrf)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'REMOVE_STATIC_SRC_TRL')
 
@@ -755,3 +691,181 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         e_tag = rpc_obj._root[0][1].text
         params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag}
         raise cfg_exc.CSR1kvConfigException(**params)
+
+
+
+############################################################
+# override some CSR1kv methods to work with physical ASR1k #
+############################################################
+class ASR1kConfigInfo(object):
+    """ASR1k Driver Cisco Configuration class."""
+    asr_dict = {}
+
+    def __init__(self):
+        self._create_asr_device_dictionary()
+        self._csr_conn = None
+        self._intfs_enabled = False
+
+    def _create_asr_device_dictionary(self):
+        """Create the ASR device cisco dictionary.
+
+        Read data from the cisco_router_plugin.ini device supported sections.
+        """
+        multi_parser = cfg.MultiConfigParser()
+        read_ok = multi_parser.read(cfg.CONF.config_file)
+
+        if len(read_ok) != len(cfg.CONF.config_file):
+            raise cfg.Error(_("Some config files were not parsed properly"))
+
+        for parsed_file in multi_parser.parsed:
+            for parsed_item in parsed_file.keys():
+                dev_id, sep, dev_ip = parsed_item.partition(':')
+                if dev_id.lower() == 'asr':
+                    for dev_key, value in parsed_file[parsed_item].items():
+                        self.asr_dict[dev_ip, dev_key] = value[0]
+
+        LOG.error("ASR dict: %s" % self.asr_dict)
+
+
+class ASR1kRoutingDriver(CSR1kvRoutingDriver):
+
+    def __init__(self, **device_params):
+        self._asr_config = ASR1kConfigInfo()
+        return
+
+    def internal_network_added(self, ri, port):
+        self._csr_create_subinterface(ri, port, False)
+        
+        # TODO:: CHANGE THIS FOR ASR HA
+        if port.get('ha_info') is not None and ri.ha_info['ha:enabled']:
+            self._csr_add_ha(ri, port)
+
+    def external_gateway_added(self, ri, ex_gw_port):
+        self._csr_create_subinterface(ri, ex_gw_port, True)
+        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+        if ex_gw_ip:
+            #Set default route via this network's gateway ip
+            self._csr_add_default_route(ri, ex_gw_ip)
+
+    def _csr_create_subinterface(self, ri, port, is_external=False):
+        vrf_name = self._csr_get_vrf_name(ri)
+        ip_cidr = port['ip_cidr']
+        netmask = netaddr.IPNetwork(ip_cidr).netmask
+        gateway_ip = ip_cidr.split('/')[0]
+        subinterface = self._get_interface_name_from_hosting_port(port)
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        self._create_subinterface(subinterface, vlan, vrf_name,
+                                  gateway_ip, netmask, is_external)
+
+    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, is_external=False):
+        if vrf_name not in self._get_vrfs():
+            LOG.error(_("VRF %s not present"), vrf_name)
+        if is_external is True:
+            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
+                                                               ip, mask)
+        else:
+            confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
+                                                      vrf_name, ip, mask)
+            
+        self._edit_running_config(confstr, 'CREATE_SUBINTERFACE')
+
+    def _get_interface_name_from_hosting_port(self, port):
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        subinterface = port['hosting_info']['hosting_port_name']
+        intfc_name = "%s.%s" % (subinterface, vlan)
+        return intfc_name
+
+    def _add_floating_ip(self, floating_ip, fixed_ip, vrf):
+        conn = self._get_connection()
+        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_STATIC_SRC_TRL')
+
+    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf):
+        conn = self._get_connection()
+        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_STATIC_SRC_TRL')
+
+    def _nat_rules_for_internet_access(self, acl_no, network,
+                                       netmask,
+                                       inner_intfc,
+                                       outer_intfc,
+                                       vrf_name):
+        """Configure the NAT rules for an internal network.
+
+           refer to comments in parent class
+        """
+        conn = self._get_connection()
+        # Duplicate ACL creation throws error, so checking
+        # it first. Remove it in future as this is not common in production
+        acl_present = self._check_acl(acl_no, network, netmask)
+        if not acl_present:
+            confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'CREATE_ACL')
+
+        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, inner_intfc,
+                                                        vrf_name)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'CREATE_SNAT')
+
+        confstr = snippets.SET_NAT % (inner_intfc, 'inside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+        confstr = snippets.SET_NAT % (outer_intfc, 'outside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+
+    def _get_connection(self):
+        """Make SSH connection to the CSR.
+           
+           refer to comments in parent class
+        """
+        
+        #hack
+        self._csr_host = "10.1.10.252"
+        self._csr_ssh_port = 22
+        self._csr_user = "admin"
+        self._csr_password = "!cisco123"
+        self._timeout = 30
+
+        try:
+            if self._csr_conn and self._csr_conn.connected:
+                return self._csr_conn
+            else:
+                self._csr_conn = manager.connect(host=self._csr_host,
+                                                 port=self._csr_ssh_port,
+                                                 username=self._csr_user,
+                                                 password=self._csr_password,
+                                                 allow_agent=False,
+                                                 look_for_keys=False,
+                                                 #device_params={'name': "csr"},
+                                                 timeout=self._timeout)
+                if not self._intfs_enabled:
+                    #self._intfs_enabled = self._enable_intfs(self._csr_conn)
+                    self._intfs_enabled = True
+
+            return self._csr_conn
+        except Exception as e:
+            conn_params = {'host': self._csr_host, 'port': self._csr_ssh_port,
+                           'user': self._csr_user,
+                           'timeout': self._timeout, 'reason': e.message}
+            raise cfg_exc.CSR1kvConnectionException(**conn_params)
+
+
+'''
+NOTES, TODO:
+
+We need to configure multiple ASRs, current code expects one "connection"
+on which the code can call get_config, edit_config
+
+Make a class with get_config/edit_config interface that talks to multiple boxes internally
+
+Change _get_connection to use this class, etc.
+'''
+class MultiConnectionManager(object):
+    def __init__(self):
+        return
