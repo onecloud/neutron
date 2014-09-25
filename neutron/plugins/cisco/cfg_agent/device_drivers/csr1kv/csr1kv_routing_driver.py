@@ -645,7 +645,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         if self._cfg_exists(confstr) or True:
             confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
+            # self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
 
     def _edit_running_config(self, confstr, snippet):
         conn = self._get_connection()
