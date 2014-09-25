@@ -53,9 +53,6 @@ class ASR1kConfigInfo(object):
                 
                     asr_entry = self.asr_dict[dev_ip]
                     asr_entry['ip'] = dev_ip
-                    asr_entry['count'] = asr_count # use this as offset for real IPs and hsrp grp
-                    asr_count += 1
-
                     asr_entry['conn'] = None
 
                     for dev_key, value in parsed_file[parsed_item].items():
@@ -69,7 +66,7 @@ class ASR1kConfigInfo(object):
     def get_asr_list(self):
         if self.asr_list is None:
             self.asr_list = sorted(self.asr_dict.values(),
-                                   key=attrgetter('order'))
+                                   key=lambda ent:ent['order'])
 
         return self.asr_list
 

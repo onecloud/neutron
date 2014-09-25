@@ -82,11 +82,14 @@ class DeviceDriverManager(object):
             else:
                 # ICEHOUSE_BACKPORT
                 # revisit this, don't recreate driver every time this is called?
-                hosting_device = resource['hosting_device']
-                driver_class = resource['router_type']['cfg_agent_driver']
-                driver = importutils.import_object(driver_class,
-                                                   **hosting_device)
-                self._drivers[resource_id] = driver
+                if resource_id in self._drivers:
+                    driver = self._drivers[resource_id]
+                else:
+                    hosting_device = resource['hosting_device']
+                    driver_class = resource['router_type']['cfg_agent_driver']
+                    driver = importutils.import_object(driver_class,
+                                                       **hosting_device)
+                    self._drivers[resource_id] = driver
                                     
             return driver
         except ImportError:
