@@ -473,7 +473,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             LOG.exception(_("Failed creating VRF %s"), vrf_name)
 
     def _remove_vrf(self, vrf_name):
-        if vrf_name in self._get_vrfs():
+        if vrf_name in self._get_vrfs() or True:
             conn = self._get_connection()
             confstr = snippets.REMOVE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
@@ -491,7 +491,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _remove_subinterface(self, subinterface):
         #Optional : verify this is the correct subinterface
-        if self._interface_exists(subinterface):
+        if self._interface_exists(subinterface) or True:
             confstr = snippets.REMOVE_SUBINTERFACE % subinterface
             self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE')
 
@@ -579,7 +579,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name):
         conn = self._get_connection()
         confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
-        if self._cfg_exists(confstr):
+        if self._cfg_exists(confstr) or True:
             confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
                                                            outer_intfc_name,
                                                            vrf_name)
@@ -642,7 +642,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _remove_default_static_route(self, gw_ip, vrf):
         conn = self._get_connection()
         confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
-        if self._cfg_exists(confstr):
+        if self._cfg_exists(confstr) or True:
             confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
