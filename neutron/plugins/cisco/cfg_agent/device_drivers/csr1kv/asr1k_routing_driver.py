@@ -27,7 +27,7 @@ class ASR1kConfigInfo(object):
 
     def __init__(self):
         self.asr_dict = {}
-        self.asr_list = []
+        self.asr_list = None
         self.hsrp_group_base = 200
         self._create_asr_device_dictionary()
         self.ignore_cfg_check = True
@@ -57,6 +57,8 @@ class ASR1kConfigInfo(object):
 
                     for dev_key, value in parsed_file[parsed_item].items():
                         asr_entry[dev_key] = value[0]
+
+                    asr_entry['order'] = int(asr_entry['order'])
 
         LOG.error("ASR dict: %s" % self.asr_dict)
 
@@ -126,7 +128,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._create_subinterface(subinterface, vlan, vrf_name,
                                       tmp_ip, netmask, asr_ent, is_external)
 
-            self._csr_add_ha_HSRP(ri, port, tmp_ip) # Always do HSRP
+            self._csr_add_ha_HSRP(ri, port, gateway_ip) # Always do HSRP
 
 
     def _csr_remove_subinterface(self, port):
@@ -236,7 +238,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vrf_name = self._csr_get_vrf_name(ri)
         
         for asr_ent in self._get_asr_list():
-            priority = asr_ent['count']
+            priority = asr_ent['order']
             subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
             self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent)
 
