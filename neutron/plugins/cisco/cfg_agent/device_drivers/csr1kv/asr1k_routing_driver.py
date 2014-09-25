@@ -235,7 +235,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     ###### Internal "Action" Functions ########
 
     def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, asr_ent, is_external=False):
-        if vrf_name not in self._get_vrfs():
+        if vrf_name not in self._get_vrfs(asr_ent):
             LOG.error(_("VRF %s not present"), vrf_name)
         if is_external is True:
             confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
@@ -336,7 +336,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._check_response(rpc_obj, 'REMOVE_IP_ROUTE')
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent):
-        if vrf_name not in self._get_vrfs():
+        if vrf_name not in self._get_vrfs(asr_ent):
             LOG.error(_("VRF %s not present"), vrf_name)
         confstr = snippets.SET_INTC_HSRP % (subinterface, vrf_name, group,
                                             priority, group, ip)
@@ -361,7 +361,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.exception(_("Failed creating VRF %s"), vrf_name)
 
     def _remove_vrf(self, vrf_name, asr_ent):
-        if vrf_name in self._get_vrfs():
+        if vrf_name in self._get_vrfs(asr_ent):
             conn = self._get_connection(asr_ent)
             confstr = snippets.REMOVE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
