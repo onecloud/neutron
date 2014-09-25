@@ -1,0 +1,417 @@
+import logging
+import netaddr
+import re
+import time
+import xml.etree.ElementTree as ET
+
+import ciscoconfparse
+from ncclient import manager
+
+from oslo.config import cfg
+
+from neutron.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
+    cisco_csr1kv_snippets as snippets)
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
+
+LOG = logging.getLogger(__name__)
+
+
+############################################################
+# override some CSR1kv methods to work with physical ASR1k #
+############################################################
+class ASR1kConfigInfo(object):
+    """ASR1k Driver Cisco Configuration class."""
+
+    def __init__(self):
+        self.asr_dict = {}
+        self.hsrp_group_base = 200
+        self._create_asr_device_dictionary()
+
+    def _create_asr_device_dictionary(self):
+        """Create the ASR device cisco dictionary.
+
+        Read data from the cisco_router_plugin.ini device supported sections.
+        """
+        multi_parser = cfg.MultiConfigParser()
+        read_ok = multi_parser.read(cfg.CONF.config_file)
+
+        if len(read_ok) != len(cfg.CONF.config_file):
+            raise cfg.Error(_("Some config files were not parsed properly"))
+
+        asr_count = 0
+        for parsed_file in multi_parser.parsed:
+            for parsed_item in parsed_file.keys():
+                dev_id, sep, dev_ip = parsed_item.partition(':')
+                if dev_id.lower() == 'asr':
+                    if dev_ip not in self.asr_dict:
+                        self.asr_dict[dev_ip] = {}
+                
+                    asr_entry = self.asr_dict[dev_ip]
+                    asr_entry['ip'] = dev_ip
+                    asr_entry['count'] = asr_count # use this as offset for real IPs and hsrp grp
+                    asr_count += 1
+
+                    asr_entry['conn'] = None
+
+                    for dev_key, value in parsed_file[parsed_item].items():
+                        asr_entry[dev_key] = value[0]
+
+        LOG.error("ASR dict: %s" % self.asr_dict)
+
+    def get_first_asr(self):
+        return self.asr_dict.values()[0]
+
+    def get_asr_list(self):
+        return self.asr_dict.values()
+
+
+
+
+class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
+
+    def __init__(self, **device_params):
+        self._asr_config = ASR1kConfigInfo()
+        self._csr_conn = None
+        self._intfs_enabled = False
+        return
+
+    def _get_asr_list(self):
+        return self._asr_config.get_asr_list()
+
+
+
+
+    ###### Public Functions ########
+
+    def internal_network_added(self, ri, port):
+        self._csr_create_subinterface(ri, port, False)
+
+    def external_gateway_added(self, ri, ex_gw_port):
+        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+        self._csr_create_subinterface(ri, ex_gw_port, True, ex_gw_ip)
+        if ex_gw_ip:
+            #Set default route via this network's gateway ip
+            self._csr_add_default_route(ri, ex_gw_ip)
+    
+
+
+
+
+    ###### Internal "Preparation" Functions ########
+
+    def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
+        vrf_name = self._csr_get_vrf_name(ri)
+        ip_cidr = port['ip_cidr']
+        netmask = netaddr.IPNetwork(ip_cidr).netmask
+        
+        if is_external is True:
+            gateway_ip = gw_ip
+        else:
+            gateway_ip = ip_cidr.split('/')[0]
+        
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+
+        for asr_ent in self._get_asr_list():
+            tmp_ip = netaddr.IPAddress(gateway_ip)
+            tmp_ip = tmp_ip.__add__(asr_ent['count']) # increment IP addr by count to get real HSRP ips
+            tmp_ip = str(tmp_ip)
+        
+            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+            self._create_subinterface(subinterface, vlan, vrf_name,
+                                      tmp_ip, netmask, asr_ent, is_external)
+
+            self._csr_add_ha_HSRP(ri, port, tmp_ip) # Always do HSRP
+
+
+
+    def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        in_vlan = self._get_interface_vlan_from_hosting_port(port)
+        acl_no = 'acl_' + str(in_vlan)
+        internal_cidr = port['ip_cidr']
+        internal_net = netaddr.IPNetwork(internal_cidr).network
+        netmask = netaddr.IPNetwork(internal_cidr).hostmask
+
+        for asr_ent in self._get_asr_list():
+            inner_intfc = self._get_interface_name_from_hosting_port(port, asr_ent)
+            outer_intfc = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
+            self._nat_rules_for_internet_access(acl_no, internal_net,
+                                                netmask, inner_intfc,
+                                                outer_intfc, vrf_name, asr_ent)
+
+    def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
+
+        for asr_ent in self._get_asr_list():
+
+            acls = []
+            #First disable nat in all inner ports
+            for port in ports:
+                in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
+                inner_vlan = self._get_interface_vlan_from_hosting_port(port, asr_ent)
+                acls.append("acl_" + str(inner_vlan))
+                self._remove_interface_nat(in_intfc_name, 'inside', asr_ent)
+
+                #Wait for two second
+                LOG.debug("Sleep for 2 seconds before clearing NAT rules")
+                time.sleep(2)
+
+                #Clear the NAT translation table
+                self._remove_dyn_nat_translations()
+                
+                # Remove dynamic NAT rules and ACLs
+                vrf_name = self._csr_get_vrf_name(ri)
+                ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
+                for acl in acls:
+                    self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
+
+
+    def _csr_add_default_route(self, ri, gw_ip):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            self._add_default_static_route(gw_ip, vrf_name, asr_ent)
+
+    def _csr_remove_default_route(self, ri, gw_ip):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            self._remove_default_static_route(gw_ip, vrf_name, asr_ent)
+
+    def _csr_add_floating_ip(self, ri, floating_ip, fixed_ip):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent)
+
+    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+        vrf_name = self._csr_get_vrf_name(ri)
+
+        for asr_ent in self._get_asr_list():
+            out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
+            # First remove NAT from outer interface
+            self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
+            #Clear the NAT translation table
+            self._remove_dyn_nat_translations(asr_ent)
+            #Remove the floating ip
+            self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent)
+            #Enable NAT on outer interface
+            self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
+
+    def _csr_update_routing_table(self, ri, action, route):
+        vrf_name = self._csr_get_vrf_name(ri)
+        destination_net = netaddr.IPNetwork(route['destination'])
+        dest = destination_net.network
+        dest_mask = destination_net.netmask
+        next_hop = route['nexthop']
+
+        for asr_ent in self._get_asr_list():
+            if action is 'replace':
+                self._add_static_route(dest, dest_mask, next_hop, vrf_name, asr_ent)
+            elif action is 'delete':
+                self._remove_static_route(dest, dest_mask, next_hop, vrf_name, asr_ent)
+            else:
+                LOG.error(_('Unknown route command %s'), action)
+
+    def _csr_create_vrf(self, ri):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            self._create_vrf(vrf_name, asr_ent)
+
+    def _csr_remove_vrf(self, ri):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            self._remove_vrf(vrf_name, asr_ent)
+
+    def _csr_add_ha_HSRP(self, ri, port, ip):
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        group = vlan % 255
+        vrf_name = self._csr_get_vrf_name(ri)
+        
+        for asr_ent in self._get_asr_list():
+            priority = asr_ent['count']
+            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+            self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent)
+
+
+
+    ###### Internal "Action" Functions ########
+
+    def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, asr_ent, is_external=False):
+        if vrf_name not in self._get_vrfs():
+            LOG.error(_("VRF %s not present"), vrf_name)
+        if is_external is True:
+            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
+                                                               ip, mask)
+        else:
+            confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
+                                                      vrf_name, ip, mask)
+            
+        self._edit_running_config(confstr, 'CREATE_SUBINTERFACE'. asr_ent)
+
+
+    def _nat_rules_for_internet_access(self, acl_no, network,
+                                       netmask,
+                                       inner_intfc,
+                                       outer_intfc,
+                                       vrf_name, asr_ent):
+        """Configure the NAT rules for an internal network.
+
+           refer to comments in parent class
+        """
+        conn = self._get_connection(asr_ent)
+        # Duplicate ACL creation throws error, so checking
+        # it first. Remove it in future as this is not common in production
+        acl_present = self._check_acl(acl_no, network, netmask)
+        if not acl_present:
+            confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'CREATE_ACL')
+
+        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, inner_intfc,
+                                                        vrf_name)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'CREATE_SNAT')
+
+        confstr = snippets.SET_NAT % (inner_intfc, 'inside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+        confstr = snippets.SET_NAT % (outer_intfc, 'outside')
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT')
+
+
+    def _add_interface_nat(self, intfc_name, intfc_type, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.SET_NAT % (intfc_name, intfc_type)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_NAT ' + intfc_type)
+
+    def _remove_interface_nat(self, intfc_name, intfc_type, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.REMOVE_NAT % (intfc_name, intfc_type)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_NAT ' + intfc_type)
+
+    def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
+        if self._cfg_exists(confstr):
+            confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
+                                                           outer_intfc_name,
+                                                           vrf_name)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_INTFC')
+
+        confstr = snippets.REMOVE_ACL % acl_no
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_ACL')
+
+    def _remove_dyn_nat_translations(self, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.CLEAR_DYN_NAT_TRANS
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'CLEAR_DYN_NAT_TRANS')
+
+    def _add_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_STATIC_SRC_TRL')
+
+    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_STATIC_SRC_TRL')
+
+    def _add_static_route(self, dest, dest_mask, next_hop, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.SET_IP_ROUTE % (vrf, dest, dest_mask, next_hop)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_IP_ROUTE')
+
+    def _remove_static_route(self, dest, dest_mask, next_hop, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.REMOVE_IP_ROUTE % (vrf, dest, dest_mask, next_hop)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_IP_ROUTE')
+
+    def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent):
+        if vrf_name not in self._get_vrfs():
+            LOG.error(_("VRF %s not present"), vrf_name)
+        confstr = snippets.SET_INTC_HSRP % (subinterface, vrf_name, group,
+                                            priority, group, ip)
+        action = "SET_INTC_HSRP (Group: %s, Priority: % s)" % (group, priority)
+        self._edit_running_config(confstr, action, asr_ent)
+
+    def _remove_ha_HSRP(self, subinterface, group, asr_ent):
+        confstr = snippets.REMOVE_INTC_HSRP % (subinterface, group)
+        action = ("REMOVE_INTC_HSRP (subinterface:%s, Group:%s)"
+                  % (subinterface, group))
+        self._edit_running_config(confstr, action, asr_ent)
+
+    def _edit_running_config(self, confstr, snippet, asr_ent):
+        conn = self._get_connection(asr_ent)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, snippet)
+
+
+
+    ###### Internal "Support" Functions ########
+
+    def _get_interface_name_from_hosting_port(self, port, asr_ent):
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        subinterface = asr_ent['target_intf']
+        intfc_name = "%s.%s" % (subinterface, vlan)
+        return intfc_name
+
+    def _get_connection(self, asr_ent):
+        """Make SSH connection to the CSR.
+           
+           refer to comments in parent class
+        """
+
+        asr_host = asr_ent['ip']
+        asr_ssh_port = asr_ent['ssh_port']
+        asr_user = asr_ent['username']
+        asr_password = asr_ent['password']
+        self._timeout = 30
+
+        try:
+            asr_conn = asr_ent['conn']
+            if asr_conn and asr_conn.connected:
+                return asr_conn
+            else:
+                asr_conn = manager.connect(host=asr_host,
+                                           port=asr_ssh_port,
+                                           username=asr_user,
+                                           password=asr_password,
+                                           allow_agent=False,
+                                           look_for_keys=False,
+                                           #device_params={'name': "csr"},
+                                           timeout=self._timeout)
+                if not self._intfs_enabled:
+                    #self._intfs_enabled = self._enable_intfs(self._csr_conn)
+                    self._intfs_enabled = True
+                    asr_ent['conn'] = asr_conn
+
+            return asr_conn
+        except Exception as e:
+            conn_params = {'host': asr_host, 'port': asr_ssh_port,
+                           'user': asr_user,
+                           'timeout': self._timeout, 'reason': e.message}
+            raise cfg_exc.CSR1kvConnectionException(**conn_params)
+
+
+'''
+NOTES, TODO:
+
+We need to configure multiple ASRs, current code expects one "connection"
+on which the code can call get_config, edit_config
+
+
+http://tools.ietf.org/html/rfc6241#appendix-E.2
+Netconf doesn't really have multi-node transcations built-in
+Need to config lock the nodes, apply config, and then deal with partial failure
+  i.e. retry later or undo the partial config, then release cfg locks
+
+'''
