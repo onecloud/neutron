@@ -27,6 +27,7 @@ class ASR1kConfigInfo(object):
         self.asr_dict = {}
         self.hsrp_group_base = 200
         self._create_asr_device_dictionary()
+        self.ignore_cfg_check = True
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -294,7 +295,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name, asr_ent):
         conn = self._get_connection(asr_ent)
         confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
-        if self._cfg_exists(confstr):
+        if self._cfg_exists(confstr) or self.ignore_cfg_check:
             confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
                                                            outer_intfc_name,
                                                            vrf_name)
@@ -361,7 +362,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.exception(_("Failed creating VRF %s"), vrf_name)
 
     def _remove_vrf(self, vrf_name, asr_ent):
-        if vrf_name in self._get_vrfs(asr_ent):
+        if vrf_name in self._get_vrfs(asr_ent) or self.ignore_cfg_check:
             conn = self._get_connection(asr_ent)
             confstr = snippets.REMOVE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)

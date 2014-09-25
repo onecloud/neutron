@@ -579,7 +579,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name):
         conn = self._get_connection()
         confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
-        if self._cfg_exists(confstr):
+        if self._cfg_exists(confstr) or True:
             confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
                                                            outer_intfc_name,
                                                            vrf_name)
@@ -642,7 +642,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def _remove_default_static_route(self, gw_ip, vrf):
         conn = self._get_connection()
         confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
-        if self._cfg_exists(confstr):
+        if self._cfg_exists(confstr) or True:
             confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
