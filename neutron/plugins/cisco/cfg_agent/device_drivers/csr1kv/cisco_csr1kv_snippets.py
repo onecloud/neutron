@@ -157,6 +157,25 @@ SET_INTC_HSRP = """
 """
 
 #=================================================#
+# Enable HSRP on a External Network Subinterface
+# $(config)interface GigabitEthernet 2.500
+# $(config)standby version 2
+# $(config)standby <group> priority <priority>
+# $(config)standby <group> ip <ip>
+#=================================================#
+SET_INTC_HSRP_EXTERNAL = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>standby version 2</cmd>
+            <cmd>standby %s priority %s</cmd>
+            <cmd>standby %s ip %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
 # Remove HSRP on a Subinterface
 # $(config)interface GigabitEthernet 2.500
 # $(config)no standby version 2
