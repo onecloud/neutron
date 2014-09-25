@@ -370,10 +370,41 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         else:
             LOG.warning(_("VRF %s not present"), vrf_name)
 
+
+    def _get_vrfs(self, asr_ent):
+        """Get the current VRFs configured in the device.
+
+        :return: A list of vrf names as string
+        """
+        vrfs = []
+        ioscfg = self._get_running_config(asr_ent)
+        parse = ciscoconfparse.CiscoConfParse(ioscfg)
+        vrfs_raw = parse.find_lines("^ip vrf")
+        for line in vrfs_raw:
+            #  raw format ['ip vrf <vrf-name>',....]
+            vrf_name = line.strip().split(' ')[2]
+            vrfs.append(vrf_name)
+        LOG.info(_("VRFs:%s"), vrfs)
+        return vrfs
+
     def _edit_running_config(self, confstr, snippet, asr_ent):
         conn = self._get_connection(asr_ent)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, snippet)
+
+    def _get_running_config(self, asr_ent):
+        """Get the CSR's current running config.
+
+        :return: Current IOS running config as multiline string
+        """
+        conn = self._get_connection(asr_ent)
+        config = conn.get_config(source="running")
+        if config:
+            root = ET.fromstring(config._raw)
+            running_config = root[0][0]
+            rgx = re.compile("\r*\n+")
+            ioscfg = rgx.split(running_config.text)
+            return ioscfg
 
 
 
