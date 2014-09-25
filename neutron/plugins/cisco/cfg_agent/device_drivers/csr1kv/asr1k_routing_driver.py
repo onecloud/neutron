@@ -258,7 +258,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _remove_subinterface(self, subinterface, asr_ent):
         #Optional : verify this is the correct subinterface
-        if self._interface_exists(subinterface) or self.ignore_cfg_check:
+        if self._interface_exists(subinterface, asr_ent) or self.ignore_cfg_check:
             confstr = snippets.REMOVE_SUBINTERFACE % subinterface
             self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE', asr_ent)
 
@@ -418,6 +418,25 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             vrfs.append(vrf_name)
         LOG.info(_("VRFs:%s"), vrfs)
         return vrfs
+
+    def _cfg_exists(self, cfg_str, asr_ent):
+        """Check a partial config string exists in the running config.
+
+        :param cfg_str: config string to check
+        :return : True or False
+        """
+        ioscfg = self._get_running_config(asr_ent)
+        parse = ciscoconfparse.CiscoConfParse(ioscfg)
+        cfg_raw = parse.find_lines("^" + cfg_str)
+        LOG.debug("_cfg_exists(): Found lines %s", cfg_raw)
+        return len(cfg_raw) > 0
+
+    def _interface_exists(self, interface, asr_ent):
+        """Check whether interface exists."""
+        ioscfg = self._get_running_config(asr_ent)
+        parse = ciscoconfparse.CiscoConfParse(ioscfg)
+        intfs_raw = parse.find_lines("^interface " + interface)
+        return len(intfs_raw) > 0
 
     def _edit_running_config(self, confstr, snippet, asr_ent):
         conn = self._get_connection(asr_ent)
