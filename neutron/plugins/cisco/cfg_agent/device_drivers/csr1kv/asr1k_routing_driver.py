@@ -159,7 +159,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             #First disable nat in all inner ports
             for port in ports:
                 in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
-                inner_vlan = self._get_interface_vlan_from_hosting_port(port, asr_ent)
+                inner_vlan = self._get_interface_vlan_from_hosting_port(port)
                 acls.append("acl_" + str(inner_vlan))
                 self._remove_interface_nat(in_intfc_name, 'inside', asr_ent)
 
