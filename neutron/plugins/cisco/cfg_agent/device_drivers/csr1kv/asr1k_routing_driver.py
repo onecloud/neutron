@@ -476,7 +476,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 if not self._intfs_enabled:
                     #self._intfs_enabled = self._enable_intfs(self._csr_conn)
                     self._intfs_enabled = True
-                    asr_ent['conn'] = asr_conn
+                
+                asr_ent['conn'] = asr_conn
 
             return asr_conn
         except Exception as e:
