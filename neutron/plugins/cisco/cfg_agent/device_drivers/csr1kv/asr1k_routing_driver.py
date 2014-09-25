@@ -275,14 +275,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         conn = self._get_connection(asr_ent)
         # Duplicate ACL creation throws error, so checking
         # it first. Remove it in future as this is not common in production
-        acl_present = self._check_acl(acl_no, network, netmask)
+        acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
         if not acl_present:
             confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
 
         confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, inner_intfc,
-                                                        vrf_name)
+                                                    vrf_name)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'CREATE_SNAT')
 
@@ -437,6 +437,27 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         parse = ciscoconfparse.CiscoConfParse(ioscfg)
         intfs_raw = parse.find_lines("^interface " + interface)
         return len(intfs_raw) > 0
+
+    def _check_acl(self, acl_no, network, netmask, asr_ent):
+        """Check a ACL config exists in the running config.
+
+        :param acl_no: access control list (ACL) number
+        :param network: network which this ACL permits
+        :param netmask: netmask of the network
+        :return:
+        """
+        exp_cfg_lines = ['ip access-list standard ' + str(acl_no),
+                         ' permit ' + str(network) + ' ' + str(netmask)]
+        ioscfg = self._get_running_config(asr_ent)
+        parse = ciscoconfparse.CiscoConfParse(ioscfg)
+        acls_raw = parse.find_children(exp_cfg_lines[0])
+        if acls_raw:
+            if exp_cfg_lines[1] in acls_raw:
+                return True
+            LOG.error(_("Mismatch in ACL configuration for %s"), acl_no)
+            return False
+        LOG.debug("%s is not present in config", acl_no)
+        return False
 
     def _edit_running_config(self, confstr, snippet, asr_ent):
         conn = self._get_connection(asr_ent)
