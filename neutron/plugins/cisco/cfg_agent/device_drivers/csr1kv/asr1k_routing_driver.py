@@ -114,7 +114,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         for asr_ent in self._get_asr_list():
             tmp_ip = netaddr.IPAddress(gateway_ip)
-            tmp_ip = tmp_ip.__add__(asr_ent['count']) # increment IP addr by count to get real HSRP ips
+            tmp_ip = tmp_ip.__add__(asr_ent['count'] + 1) # increment IP addr by count to get real HSRP ips
             tmp_ip = str(tmp_ip)
         
             subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
@@ -244,7 +244,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
                                                       vrf_name, ip, mask)
             
-        self._edit_running_config(confstr, 'CREATE_SUBINTERFACE'. asr_ent)
+        self._edit_running_config(confstr, 'CREATE_SUBINTERFACE', asr_ent)
 
 
     def _nat_rules_for_internet_access(self, acl_no, network,
