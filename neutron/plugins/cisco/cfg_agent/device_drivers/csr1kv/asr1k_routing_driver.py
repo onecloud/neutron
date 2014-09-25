@@ -26,7 +26,6 @@ class ASR1kConfigInfo(object):
     def __init__(self):
         self.asr_dict = {}
         self.asr_list = None
-        self.hsrp_group_base = 200
         self._create_asr_device_dictionary()
 
     def _create_asr_device_dictionary(self):
@@ -79,6 +78,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._csr_conn = None
         self._intfs_enabled = False
         self.ignore_cfg_check = True
+        self.hsrp_group_base = 200
+        self.hsrp_real_ip_base = 200
         return
 
     def _get_asr_list(self):
@@ -96,7 +97,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         self._csr_create_subinterface(ri, ex_gw_port, True, ex_gw_ip)
         if ex_gw_ip:
-            #Set default route via this network's gateway ip
+            # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
     
 
@@ -119,7 +120,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         for asr_ent in self._get_asr_list():
             tmp_ip = netaddr.IPAddress(gateway_ip)
-            tmp_ip = tmp_ip.__add__(asr_ent['order'] + 1) # increment IP addr by count to get real HSRP ips
+            tmp_ip = tmp_ip.__add__(asr_ent['order'] + self.hsrp_real_ip_base) # increment IP addr by count to get real HSRP ips
             tmp_ip = str(tmp_ip)
         
             subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
@@ -177,11 +178,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     def _csr_add_default_route(self, ri, gw_ip):
+        return # disable for now until next_hop issue resolved
         vrf_name = self._csr_get_vrf_name(ri)
         for asr_ent in self._get_asr_list():
             self._add_default_static_route(gw_ip, vrf_name, asr_ent)
 
     def _csr_remove_default_route(self, ri, gw_ip):
+        return # disable for now
         vrf_name = self._csr_get_vrf_name(ri)
         for asr_ent in self._get_asr_list():
             self._remove_default_static_route(gw_ip, vrf_name, asr_ent)
