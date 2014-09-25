@@ -349,6 +349,27 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                   % (subinterface, group))
         self._edit_running_config(confstr, action, asr_ent)
 
+
+    def _create_vrf(self, vrf_name, asr_ent):
+        try:
+            conn = self._get_connection(asr_ent)
+            confstr = snippets.CREATE_VRF % vrf_name
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            if self._check_response(rpc_obj, 'CREATE_VRF'):
+                LOG.info(_("VRF %s successfully created"), vrf_name)
+        except Exception:
+            LOG.exception(_("Failed creating VRF %s"), vrf_name)
+
+    def _remove_vrf(self, vrf_name, asr_ent):
+        if vrf_name in self._get_vrfs():
+            conn = self._get_connection(asr_ent)
+            confstr = snippets.REMOVE_VRF % vrf_name
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            if self._check_response(rpc_obj, 'REMOVE_VRF'):
+                LOG.info(_("VRF %s removed"), vrf_name)
+        else:
+            LOG.warning(_("VRF %s not present"), vrf_name)
+
     def _edit_running_config(self, confstr, snippet, asr_ent):
         conn = self._get_connection(asr_ent)
         rpc_obj = conn.edit_config(target='running', config=confstr)
