@@ -122,7 +122,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         for asr_ent in self._get_asr_list():
             tmp_ip = netaddr.IPAddress(gateway_ip)
-            tmp_ip = tmp_ip.__add__(asr_ent['count'] + 1) # increment IP addr by count to get real HSRP ips
+            tmp_ip = tmp_ip.__add__(asr_ent['order'] + 1) # increment IP addr by count to get real HSRP ips
             tmp_ip = str(tmp_ip)
         
             subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
@@ -131,6 +131,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
             self._csr_add_ha_HSRP(ri, port, tmp_ip) # Always do HSRP
 
+
+    def _csr_remove_subinterface(self, port):
+        for asr_ent in self._get_asr_list():
+            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+            self._remove_subinterface(subinterface, asr_ent)
 
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
@@ -253,6 +258,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                       vrf_name, ip, mask)
             
         self._edit_running_config(confstr, 'CREATE_SUBINTERFACE', asr_ent)
+
+    def _remove_subinterface(self, subinterface, asr_ent):
+        #Optional : verify this is the correct subinterface
+        if self._interface_exists(subinterface) or self.ignore_cfg_check:
+            confstr = snippets.REMOVE_SUBINTERFACE % subinterface
+            self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE', asr_ent)
 
 
     def _nat_rules_for_internet_access(self, acl_no, network,
