@@ -127,7 +127,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._create_subinterface(subinterface, vlan, vrf_name,
                                       tmp_ip, netmask, asr_ent, is_external)
 
-            self._csr_add_ha_HSRP(ri, port, gateway_ip) # Always do HSRP
+            self._csr_add_ha_HSRP(ri, port, gateway_ip, is_external) # Always do HSRP
 
 
     def _csr_remove_subinterface(self, port):
@@ -233,7 +233,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         for asr_ent in self._get_asr_list():
             self._remove_vrf(vrf_name, asr_ent)
 
-    def _csr_add_ha_HSRP(self, ri, port, ip):
+    def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
         vlan = self._get_interface_vlan_from_hosting_port(port)
         group = vlan % 255
         vrf_name = self._csr_get_vrf_name(ri)
@@ -241,7 +241,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         for asr_ent in self._get_asr_list():
             priority = asr_ent['order']
             subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
-            self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent)
+            self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent, is_external)
 
 
 
@@ -370,11 +370,16 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
 
-    def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent):
+    def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent, is_external=False):
         if vrf_name not in self._get_vrfs(asr_ent):
             LOG.error(_("VRF %s not present"), vrf_name)
-        confstr = snippets.SET_INTC_HSRP % (subinterface, vrf_name, group,
-                                            priority, group, ip)
+
+        if is_external is True:
+            confstr = snippets.SET_INTC_HSRP_EXTERNAL % (subinterface, group,
+                                                         priority, group, ip)
+        else:
+            confstr = snippets.SET_INTC_HSRP % (subinterface, vrf_name, group,
+                                                priority, group, ip)
         action = "SET_INTC_HSRP (Group: %s, Priority: % s)" % (group, priority)
         self._edit_running_config(confstr, action, asr_ent)
 
