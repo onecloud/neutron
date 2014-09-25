@@ -168,7 +168,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 time.sleep(2)
 
                 #Clear the NAT translation table
-                self._remove_dyn_nat_translations()
+                self._remove_dyn_nat_translations(asr_ent)
                 
                 # Remove dynamic NAT rules and ACLs
                 vrf_name = self._csr_get_vrf_name(ri)
