@@ -14,6 +14,8 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
 
+from operator import attrgetter
+
 LOG = logging.getLogger(__name__)
 
 
@@ -25,6 +27,7 @@ class ASR1kConfigInfo(object):
 
     def __init__(self):
         self.asr_dict = {}
+        self.asr_list = []
         self.hsrp_group_base = 200
         self._create_asr_device_dictionary()
         self.ignore_cfg_check = True
@@ -64,7 +67,11 @@ class ASR1kConfigInfo(object):
         return self.asr_dict.values()[0]
 
     def get_asr_list(self):
-        return self.asr_dict.values()
+        if self.asr_list is None:
+            self.asr_list = sorted(self.asr_dict.values(),
+                                   key=attrgetter('order'))
+
+        return self.asr_list
 
 
 
