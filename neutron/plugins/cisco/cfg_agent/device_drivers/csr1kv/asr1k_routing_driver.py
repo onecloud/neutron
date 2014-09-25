@@ -28,7 +28,6 @@ class ASR1kConfigInfo(object):
         self.asr_list = None
         self.hsrp_group_base = 200
         self._create_asr_device_dictionary()
-        self.ignore_cfg_check = True
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -79,6 +78,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._asr_config = ASR1kConfigInfo()
         self._csr_conn = None
         self._intfs_enabled = False
+        self.ignore_cfg_check = True
         return
 
     def _get_asr_list(self):
