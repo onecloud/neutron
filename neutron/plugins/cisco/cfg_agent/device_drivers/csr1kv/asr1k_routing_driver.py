@@ -14,8 +14,6 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
 
-from operator import attrgetter
-
 LOG = logging.getLogger(__name__)
 
 
@@ -352,6 +350,22 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         confstr = snippets.REMOVE_IP_ROUTE % (vrf, dest, dest_mask, next_hop)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'REMOVE_IP_ROUTE')
+
+    def _add_default_static_route(self, gw_ip, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
+        if not self._cfg_exists(confstr):
+            confstr = snippets.SET_DEFAULT_ROUTE % (vrf, gw_ip)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE')
+
+    def _remove_default_static_route(self, gw_ip, vrf, asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
+        if self._cfg_exists(confstr) or self.ignore_cfg_check:
+            confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent):
         if vrf_name not in self._get_vrfs(asr_ent):
