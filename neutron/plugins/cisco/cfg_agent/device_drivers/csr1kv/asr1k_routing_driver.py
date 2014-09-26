@@ -375,11 +375,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.error(_("VRF %s not present"), vrf_name)
 
         if is_external is True:
-            confstr = snippets.SET_INTC_HSRP_EXTERNAL % (subinterface, group,
-                                                         priority, group, ip)
+            confstr = snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
+                                                             priority, group, ip,
+                                                             group, group, group, group)
         else:
-            confstr = snippets.SET_INTC_HSRP % (subinterface, vrf_name, group,
-                                                priority, group, ip)
+            confstr = snippets.SET_INTC_ASR_HSRP % (subinterface, vrf_name, group,
+                                                    priority, group, ip,
+                                                    group, group, group, group)
+
         action = "SET_INTC_HSRP (Group: %s, Priority: % s)" % (group, priority)
         self._edit_running_config(confstr, action, asr_ent)
 

@@ -157,19 +157,46 @@ SET_INTC_HSRP = """
 """
 
 #=================================================#
+# Enable HSRP on a Subinterface for ASR 
+# $(config)interface GigabitEthernet 2.500
+# $(config)vrf forwarding nrouter-e7d4y5
+# $(config)standby version 2
+# $(config)standby <group> priority <priority>
+# $(config)standby <group> ip <ip>
+#=================================================#
+SET_INTC_ASR_HSRP = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>ip vrf forwarding %s</cmd>
+            <cmd>standby version 2</cmd>
+            <cmd>standby %s priority %s</cmd>
+            <cmd>standby %s ip %s</cmd>
+            <cmd>standby %s preempt</cmd>
+            <cmd>standby %s timer msec 200 msec 600</cmd>
+            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
 # Enable HSRP on a External Network Subinterface
 # $(config)interface GigabitEthernet 2.500
 # $(config)standby version 2
 # $(config)standby <group> priority <priority>
 # $(config)standby <group> ip <ip>
 #=================================================#
-SET_INTC_HSRP_EXTERNAL = """
+SET_INTC_ASR_HSRP_EXTERNAL = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
             <cmd>standby version 2</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
+            <cmd>standby %s preempt</cmd>
+            <cmd>standby %s timer msec 200 msec 600</cmd>
+            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 
