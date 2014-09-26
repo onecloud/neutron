@@ -1,3 +1,26 @@
+
+### ASR Configuration Examples  #########
+Configure the ASRs in use at the end of /etc/neutron/plugins/cisco/cisco_router_plugin.ini:
+
+[asr:10.1.10.252]
+username = admin
+password = !cisco123
+ssh_port = 22
+target_intf = Port-channel10
+order = 0
+
+[asr:10.1.10.253]
+username = admin
+password = !cisco123
+ssh_port = 22
+target_intf = Port-channel11
+order = 1
+
+
+"order" is used to determine HSRP priority and real IP assignment.
+
+
+
 ## cisco plugin icehouse backport notes ##
 
 1.) Make sure you have ciscoconfparse python library:
