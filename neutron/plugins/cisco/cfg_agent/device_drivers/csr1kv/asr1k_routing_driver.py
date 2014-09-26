@@ -235,7 +235,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
         vlan = self._get_interface_vlan_from_hosting_port(port)
-        group = vlan % 255
+        group = vlan
         vrf_name = self._csr_get_vrf_name(ri)
         
         for asr_ent in self._get_asr_list():
