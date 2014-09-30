@@ -345,14 +345,14 @@ REMOVE_STATIC_SRC_TRL = """
 #=========================================================================#
 # Set Static source translation on an interface
 # Syntax: ip nat inside source static <fixed_ip> <floating_ip>
-# .......vrf <vrf_name> match-in-vrf
+# .......vrf <vrf_name> redundancy <hsrp group name> 
 # eg: $(config)ip nat inside source static 192.168.0.1 121.158.0.5
-#    ..........vrf nrouter-e7d4y5 match-in-vrf
+#    ..........vrf nrouter-e7d4y5 redundancy neutron-hsrp-grp-305 
 #========================================================================#
 SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
 <config>
         <cli-config-data>
-            <cmd>ip nat inside source static %s %s vrf %s</cmd>
+            <cmd>ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 
@@ -361,14 +361,14 @@ SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
 #=========================================================================#
 # Remove Static source translation on an interface
 # Syntax: no ip nat inside source static <fixed_ip> <floating_ip>
-# .......vrf <vrf_name> match-in-vrf
+# .......vrf <vrf_name> redundancy <hsrp group name> 
 # eg: $(config)no ip nat inside source static 192.168.0.1 121.158.0.5
-#    ..........vrf nrouter-e7d4y5 match-in-vrf
+#    ..........vrf nrouter-e7d4y5 redundancy neutron-hsrp-grp-305
 #========================================================================#
 REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH = """
 <config>
         <cli-config-data>
-            <cmd>no ip nat inside source static %s %s vrf %s</cmd>
+            <cmd>no ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 

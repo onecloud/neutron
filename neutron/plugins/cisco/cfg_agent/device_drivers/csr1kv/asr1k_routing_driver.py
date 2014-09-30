@@ -189,10 +189,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         for asr_ent in self._get_asr_list():
             self._remove_default_static_route(gw_ip, vrf_name, asr_ent)
 
-    def _csr_add_floating_ip(self, ri, floating_ip, fixed_ip):
+    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         for asr_ent in self._get_asr_list():
-            self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent)
+            self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
@@ -204,7 +204,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             #Clear the NAT translation table
             self._remove_dyn_nat_translations(asr_ent)
             #Remove the floating ip
-            self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent)
+            self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
             #Enable NAT on outer interface
             self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
 
@@ -330,15 +330,25 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'CLEAR_DYN_NAT_TRANS')
 
-    def _add_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent):
+    def _add_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent, ex_gw_port):
+        """
+        To implement a floating ip, an ip static nat is configured in the underlying router
+        ex_gw_port contains data to derive the vlan associated with related subnet for the
+        fixed ip.  The vlan in turn is applied to the redundancy parameter for setting the
+        IP NAT.
+        """
         conn = self._get_connection(asr_ent)
-        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        vlan = ex_gw_port['hosting_info']['segmentation_id']
+        
+        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'SET_STATIC_SRC_TRL')
 
-    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent):
+    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, asr_ent,ex_gw_port):
         conn = self._get_connection(asr_ent)
-        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf)
+        vlan = ex_gw_port['hosting_info']['segmentation_id']
+
+        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'REMOVE_STATIC_SRC_TRL')
 

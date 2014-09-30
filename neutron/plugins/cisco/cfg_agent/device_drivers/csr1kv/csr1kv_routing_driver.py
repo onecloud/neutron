@@ -103,7 +103,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._csr_remove_internalnw_nat_rules(ri, [port], ex_gw_port)
 
     def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        self._csr_add_floating_ip(ri, floating_ip, fixed_ip)
+        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
 
     def floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
         self._csr_remove_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
@@ -201,7 +201,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         vrf_name = self._csr_get_vrf_name(ri)
         self._remove_default_static_route(gw_ip, vrf_name)
 
-    def _csr_add_floating_ip(self, ri, floating_ip, fixed_ip):
+    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         self._add_floating_ip(floating_ip, fixed_ip, vrf_name)
 
