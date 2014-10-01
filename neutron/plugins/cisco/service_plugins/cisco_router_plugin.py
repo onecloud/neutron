@@ -31,9 +31,13 @@ from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 from neutron.db import l3_rpc_base 
 from neutron.db import l3_db
 
-from neutron.common import exceptions as n_exc
 from neutron.openstack.common.notifier import api as notifier_api
 from neutron.api.v2 import attributes
+from neutron.db import models_v2
+from neutron.openstack.common import log as logging
+
+LOG = logging.getLogger(__name__)
+
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1k_driver)
 
@@ -161,64 +165,19 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                 " networks via a NAT gateway.")
 
     def add_router_interface(self, context, router_id, interface_info):
-        if not interface_info:
-            msg = _("Either subnet_id or port_id must be specified")
-            raise n_exc.BadRequest(resource='router', msg=msg)
+        info = super(PhysicalCiscoRouterPlugin, self).add_router_interface(context,
+                                                                           router_id,
+                                                                           interface_info)
 
-        if 'port_id' in interface_info:
-            # make sure port update is committed
-            with context.session.begin(subtransactions=True):
-                if 'subnet_id' in interface_info:
-                    msg = _("Cannot specify both subnet-id and port-id")
-                    raise n_exc.BadRequest(resource='router', msg=msg)
+        LOG.error("ZXCVWSAD finished parent add_router_interface, info:%s" % (info))
 
-                port = self._core_plugin._get_port(context,
-                                                   interface_info['port_id'])
-                if port['device_id']:
-                    raise n_exc.PortInUse(net_id=port['network_id'],
-                                          port_id=port['id'],
-                                          device_id=port['device_id'])
-                fixed_ips = [ip for ip in port['fixed_ips']]
-                if len(fixed_ips) != 1:
-                    msg = _('Router port must have exactly one fixed IP')
-                    raise n_exc.BadRequest(resource='router', msg=msg)
-                subnet_id = fixed_ips[0]['subnet_id']
-                subnet = self._core_plugin._get_subnet(context, subnet_id)
-                self._check_for_dup_router_subnet(context, router_id,
-                                                  port['network_id'],
-                                                  subnet['id'],
-                                                  subnet['cidr'])
-                port.update({'device_id': router_id,
-                             'device_owner': l3_db.DEVICE_OWNER_ROUTER_INTF})
-        elif 'subnet_id' in interface_info:
-            subnet_id = interface_info['subnet_id']
-            subnet = self._core_plugin._get_subnet(context, subnet_id)
-            # Ensure the subnet has a gateway
-            if not subnet['gateway_ip']:
-                msg = _('Subnet for router interface must have a gateway IP')
-                raise n_exc.BadRequest(resource='router', msg=msg)
-            self._check_for_dup_router_subnet(context, router_id,
-                                              subnet['network_id'],
-                                              subnet_id,
-                                              subnet['cidr'])
-            fixed_ip = {'ip_address': subnet['gateway_ip'],
-                        'subnet_id': subnet['id']}
-            port = self._core_plugin.create_port(context, {
-                'port':
-                {'tenant_id': subnet['tenant_id'],
-                 'network_id': subnet['network_id'],
-                 'fixed_ips': [fixed_ip],
-                 'mac_address': attributes.ATTR_NOT_SPECIFIED,
-                 'admin_state_up': True,
-                 'device_id': router_id,
-                 'device_owner': l3_db.DEVICE_OWNER_ROUTER_INTF,
-                 'name': ''}})
-
-        port_list = []
-        port_list.append(port)
+        # If no exception has been raised, we're good to go            
+        subnet_id = info['subnet_id']
+        subnet = self._core_plugin._get_subnet(context, subnet_id)
 
         # Create HSRP standby interfaces
-        num_asr = len(self.asr_cfg_info.get_asr_list)
+        port_list = []
+        num_asr = len(self.asr_cfg_info.get_asr_list())
         for asr_idx in range(0, num_asr):
             asr_port = self._core_plugin.create_port(context, {
                 'port':
@@ -231,21 +190,65 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                  'device_owner': DEVICE_OWNER_ROUTER_HA_INTF,
                  'name': ''}})
 
+            LOG.error("ZXCVWSAD added new port %s" % (asr_port))
+
             port_list.append(asr_port)
         
         for port in port_list:
             self.l3_rpc_notifier.routers_updated(
                 context, [router_id], 'add_router_interface')
-            info = {'id': router_id,
-                    'tenant_id': subnet['tenant_id'],
-                    'port_id': port['id'],
-                    'subnet_id': port['fixed_ips'][0]['subnet_id']}
+            ha_info = {'id': router_id,
+                       'tenant_id': subnet['tenant_id'],
+                       'port_id': port['id'],
+                       'subnet_id': port['fixed_ips'][0]['subnet_id']}
             notifier_api.notify(context,
                                 notifier_api.publisher_id('network'),
                                 'router.interface.create',
                                 notifier_api.CONF.default_notification_level,
-                                {'router_interface': info})
+                                {'router_interface': ha_info})
+        
         return info
+
+
+    def remove_router_interface(self, context, router_id, interface_info):
+        info = super(PhysicalCiscoRouterPlugin, self).remove_router_interface(context,
+                                                                              router_id,
+                                                                              interface_info)
+
+        LOG.error("ZXCVWSAD finished parent remove_router_interface, info:%s" % (info))
+
+
+        # If no exception has been raised, we're good to go            
+        subnet_id = info['subnet_id']
+        subnet = self._core_plugin._get_subnet(context, subnet_id)
+
+        # Delete HSRP standby interfaces
+        port_list = []
+        rport_qry = context.session.query(models_v2.Port)
+        asr_ports = rport_qry.filter_by(device_id=router_id,
+                                        device_owner=DEVICE_OWNER_ROUTER_HA_INTF,
+                                        network_id=subnet['network_id'])
+        for asr_port in asr_ports:
+            port_list.append(asr_port)
+            self._core_plugin.delete_port(context, asr_port['id'],
+                                          l3_port_check=False)
+            LOG.error("ZXCVWSAD deleted port %s" % (asr_port))
+
+
+        for port in port_list:
+            self.l3_rpc_notifier.routers_updated(
+                context, [router_id], 'remove_router_interface')
+            ha_info = {'id': router_id,
+                       'tenant_id': subnet['tenant_id'],
+                       'port_id': port['id'],
+                       'subnet_id': subnet_id}
+            notifier_api.notify(context,
+                                notifier_api.publisher_id('network'),
+                                'router.interface.delete',
+                                notifier_api.CONF.default_notification_level,
+                                {'router_interface': ha_info})
+        return info
+        
 
     @property
     def _core_plugin(self):
