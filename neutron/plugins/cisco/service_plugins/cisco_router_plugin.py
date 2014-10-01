@@ -35,6 +35,10 @@ from neutron.common import exceptions as n_exc
 from neutron.openstack.common.notifier import api as notifier_api
 from neutron.api.v2 import attributes
 
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1k_driver)
+
+
+DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
 
 # class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
 class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
@@ -130,6 +134,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         self._setup_backlog_handling()
         self._setup_device_handling()
 
+        self.asr_cfg_info = asr1k_driver.ASR1kConfigInfo()
+
     def setup_rpc(self):
         # RPC support
         self.topic = topics.L3PLUGIN
@@ -208,17 +214,37 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                  'device_owner': l3_db.DEVICE_OWNER_ROUTER_INTF,
                  'name': ''}})
 
-        self.l3_rpc_notifier.routers_updated(
-            context, [router_id], 'add_router_interface')
-        info = {'id': router_id,
-                'tenant_id': subnet['tenant_id'],
-                'port_id': port['id'],
-                'subnet_id': port['fixed_ips'][0]['subnet_id']}
-        notifier_api.notify(context,
-                            notifier_api.publisher_id('network'),
-                            'router.interface.create',
-                            notifier_api.CONF.default_notification_level,
-                            {'router_interface': info})
+        port_list = []
+        port_list.append(port)
+
+        # Create HSRP standby interfaces
+        num_asr = len(self.asr_cfg_info.get_asr_list)
+        for asr_idx in range(0, num_asr):
+            asr_port = self._core_plugin.create_port(context, {
+                'port':
+                {'tenant_id': subnet['tenant_id'],
+                 'network_id': subnet['network_id'],
+                 'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
+                 'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                 'admin_state_up': True,
+                 'device_id': router_id,
+                 'device_owner': DEVICE_OWNER_ROUTER_HA_INTF,
+                 'name': ''}})
+
+            port_list.append(asr_port)
+        
+        for port in port_list:
+            self.l3_rpc_notifier.routers_updated(
+                context, [router_id], 'add_router_interface')
+            info = {'id': router_id,
+                    'tenant_id': subnet['tenant_id'],
+                    'port_id': port['id'],
+                    'subnet_id': port['fixed_ips'][0]['subnet_id']}
+            notifier_api.notify(context,
+                                notifier_api.publisher_id('network'),
+                                'router.interface.create',
+                                notifier_api.CONF.default_notification_level,
+                                {'router_interface': info})
         return info
 
     @property
