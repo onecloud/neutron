@@ -29,6 +29,12 @@ from neutron.plugins.common import constants
 
 from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 from neutron.db import l3_rpc_base 
+from neutron.db import l3_db
+
+from neutron.common import exceptions as n_exc
+from neutron.openstack.common.notifier import api as notifier_api
+from neutron.api.v2 import attributes
+
 
 # class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
 class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
@@ -105,7 +111,8 @@ class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 agents_db.AgentDbMixin,
                                 l3_router_appliance_db.PhysicalL3RouterApplianceDBMixin,
-                                device_handling_db.DeviceHandlingMixin):
+                                device_handling_db.DeviceHandlingMixin,
+                                l3_db.L3_NAT_db_mixin):
 
     """Implementation of Cisco L3 Router Service Plugin for Neutron.
 
@@ -146,6 +153,73 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         return ("Cisco Router Service Plugin for basic L3 forwarding"
                 " between (L2) Neutron networks and access to external"
                 " networks via a NAT gateway.")
+
+    def add_router_interface(self, context, router_id, interface_info):
+        if not interface_info:
+            msg = _("Either subnet_id or port_id must be specified")
+            raise n_exc.BadRequest(resource='router', msg=msg)
+
+        if 'port_id' in interface_info:
+            # make sure port update is committed
+            with context.session.begin(subtransactions=True):
+                if 'subnet_id' in interface_info:
+                    msg = _("Cannot specify both subnet-id and port-id")
+                    raise n_exc.BadRequest(resource='router', msg=msg)
+
+                port = self._core_plugin._get_port(context,
+                                                   interface_info['port_id'])
+                if port['device_id']:
+                    raise n_exc.PortInUse(net_id=port['network_id'],
+                                          port_id=port['id'],
+                                          device_id=port['device_id'])
+                fixed_ips = [ip for ip in port['fixed_ips']]
+                if len(fixed_ips) != 1:
+                    msg = _('Router port must have exactly one fixed IP')
+                    raise n_exc.BadRequest(resource='router', msg=msg)
+                subnet_id = fixed_ips[0]['subnet_id']
+                subnet = self._core_plugin._get_subnet(context, subnet_id)
+                self._check_for_dup_router_subnet(context, router_id,
+                                                  port['network_id'],
+                                                  subnet['id'],
+                                                  subnet['cidr'])
+                port.update({'device_id': router_id,
+                             'device_owner': l3_db.DEVICE_OWNER_ROUTER_INTF})
+        elif 'subnet_id' in interface_info:
+            subnet_id = interface_info['subnet_id']
+            subnet = self._core_plugin._get_subnet(context, subnet_id)
+            # Ensure the subnet has a gateway
+            if not subnet['gateway_ip']:
+                msg = _('Subnet for router interface must have a gateway IP')
+                raise n_exc.BadRequest(resource='router', msg=msg)
+            self._check_for_dup_router_subnet(context, router_id,
+                                              subnet['network_id'],
+                                              subnet_id,
+                                              subnet['cidr'])
+            fixed_ip = {'ip_address': subnet['gateway_ip'],
+                        'subnet_id': subnet['id']}
+            port = self._core_plugin.create_port(context, {
+                'port':
+                {'tenant_id': subnet['tenant_id'],
+                 'network_id': subnet['network_id'],
+                 'fixed_ips': [fixed_ip],
+                 'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                 'admin_state_up': True,
+                 'device_id': router_id,
+                 'device_owner': l3_db.DEVICE_OWNER_ROUTER_INTF,
+                 'name': ''}})
+
+        self.l3_rpc_notifier.routers_updated(
+            context, [router_id], 'add_router_interface')
+        info = {'id': router_id,
+                'tenant_id': subnet['tenant_id'],
+                'port_id': port['id'],
+                'subnet_id': port['fixed_ips'][0]['subnet_id']}
+        notifier_api.notify(context,
+                            notifier_api.publisher_id('network'),
+                            'router.interface.create',
+                            notifier_api.CONF.default_notification_level,
+                            {'router_interface': info})
+        return info
 
     @property
     def _core_plugin(self):
