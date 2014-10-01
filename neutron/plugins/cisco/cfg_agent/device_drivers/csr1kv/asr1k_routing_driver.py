@@ -522,6 +522,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                            password=asr_password,
                                            allow_agent=False,
                                            look_for_keys=False,
+                                           unknown_host_cb=lambda host,fingerprint: True,
                                            #device_params={'name': "csr"},
                                            timeout=self._timeout)
                 if not self._intfs_enabled:
