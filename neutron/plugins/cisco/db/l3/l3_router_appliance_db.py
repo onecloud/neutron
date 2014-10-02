@@ -38,6 +38,10 @@ from neutron.plugins.cisco.l3.rpc import l3_router_rpc_joint_agent_api
 
 from neutron.openstack.common.notifier import api as notifier_api
 
+from neutron.db import model_base
+import sqlalchemy as sa
+
+
 LOG = logging.getLogger(__name__)
 
 
@@ -621,6 +625,39 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
 
 
 
+
+
+
+class CiscoPhysicalRouter(model_base.BASEV2, models_v2.HasId):
+    """Represents a physical cisco router."""
+
+    __tablename__ = 'cisco_phy_routers'
+
+    name = sa.Column(sa.String(255))
+    status = sa.Column(sa.String(16))
+    # other columns TBD
+
+
+class CiscoPhyRouterPortBinding(model_base.BASEV2):
+    """ HSRP interface mappings to physical ASRs """
+
+    __tablename__ = 'cisco_phy_router_port_bindings'
+
+    port_id = sa.Column(sa.String(36),
+                        sa.ForeignKey('ports.id', ondelete="CASCADE"),
+                        primary_key=True)
+
+    subnet_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("subnets.id", ondelete='CASCADE'))
+
+    router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("routers.id", ondelete='CASCADE'))
+
+    phy_router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("cisco_phy_routers.id", ondelete='CASCADE'))
+
+
+
 class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     
     def create_router(self, context, router):
@@ -676,6 +713,16 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             interfaces = self.get_sync_interfaces(context, router_ids)
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+
+            for ha_intf in ha_interfaces:
+                port_id = ha_intf['id']
+                phy_port_qry = context.session.query(CiscoPhyRouterPortBinding)
+                phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == port_id)
+                phy_port_qry = phy_port_qry.join(CiscoPhysicalRouter)
+                ha_intf['phy_port_binding'] = phy_port_qry
+                LOG.error("WWWWWWW phy_port_qry: %s" % (phy_port_qry))
+                
+
             interfaces += ha_interfaces
         return self._process_sync_data(routers, interfaces, floating_ips)
 
