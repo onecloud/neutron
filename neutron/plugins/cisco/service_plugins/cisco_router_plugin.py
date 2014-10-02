@@ -33,13 +33,16 @@ from neutron.db import l3_db
 
 from neutron.openstack.common.notifier import api as notifier_api
 from neutron.api.v2 import attributes
+from neutron.db import model_base
 from neutron.db import models_v2
 from neutron.openstack.common import log as logging
 
-LOG = logging.getLogger(__name__)
-
+import sqlalchemy as sa
+from sqlalchemy import orm
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1k_driver)
+
+LOG = logging.getLogger(__name__)
 
 
 DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
@@ -116,6 +119,32 @@ class CiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             return self._plugin
 
 
+class CiscoPhysicalRouter(model_base.BASEV2, models_v2.HasId):
+    """Represents a physical cisco router."""
+
+    __tablename__ = 'cisco_phy_routers'
+
+    name = sa.Column(sa.String(255))
+    status = sa.Column(sa.String(16))
+    # other columns TBD
+
+
+class CiscoPhyRouterPortBinding(model_base.BASEV2):
+    """ HSRP interface mappings to physical ASRs """
+
+    __tablename__ = 'cisco_phy_router_port_bindings'
+
+    port_id = sa.Column(sa.String(36),
+                        sa.ForeignKey('ports.id', ondelete="CASCADE"),
+                        primary_key=True)
+
+    router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("routers.id", ondelete='CASCADE'))
+
+    phy_router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("cisco_phy_routers.id", ondelete='CASCADE'))
+
+
 class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 agents_db.AgentDbMixin,
                                 l3_router_appliance_db.PhysicalL3RouterApplianceDBMixin,
@@ -169,6 +198,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                                            router_id,
                                                                            interface_info)
 
+        
         LOG.error("ZXCVWSAD finished parent add_router_interface, info:%s" % (info))
 
         # If no exception has been raised, we're good to go            
@@ -206,7 +236,18 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 'router.interface.create',
                                 notifier_api.CONF.default_notification_level,
                                 {'router_interface': ha_info})
+
+        # go ahead and map these interfaces to physical ASRs
+        self.asr_cfg_info.sync_asr_list_with_db(context)
         
+        rport_qry = context.session.query(CiscoPhysicalRouter)
+        for db_asr, port in zip(rport_qry, port_list):            
+            port_binding = CiscoPhyRouterPortBinding(port_id=port['id'],
+                                                     router_id=router_id,
+                                                     phy_router_id=db_asr.id)
+            context.session.add(port_binding)
+        
+
         return info
 
 
