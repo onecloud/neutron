@@ -665,6 +665,21 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
 
+    def get_sync_data(self, context, router_ids=None, active=None):
+        """Query routers and their related floating_ips, interfaces."""
+        with context.session.begin(subtransactions=True):
+            routers = self._get_sync_routers(context,
+                                             router_ids=router_ids,
+                                             active=active)
+            router_ids = [router['id'] for router in routers]
+            floating_ips = self._get_sync_floating_ips(context, router_ids)
+            interfaces = self.get_sync_interfaces(context, router_ids)
+            ha_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                     l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+            interfaces += ha_interfaces
+        return self._process_sync_data(routers, interfaces, floating_ips)
+
+
     def get_sync_data_ext(self, context, router_ids=None, active=None):
         """Query routers and their related floating_ips, interfaces.
 
