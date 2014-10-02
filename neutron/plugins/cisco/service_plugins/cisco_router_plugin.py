@@ -204,7 +204,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         missing_db_asr_list = []
         #asr_list = self.get_asr_list()
 
-        rport_qry = context.session.query(CiscoPhysicalRouter)
+        phy_router_qry = context.session.query(CiscoPhysicalRouter).all()
 
         # Build list of names that exist in cfg
         for asr in asr_list:
@@ -212,7 +212,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
         # Build list of names that exist in DB
         # Build list of db objects that do not have names in cfg
-        for db_asr in rport_qry:
+        for db_asr in phy_router_qry:
             db_names.append(db_asr.name)
             if db_asr.name not in cfg_names:
                 missing_db_asr_list.append(db_asr)
@@ -280,12 +280,15 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         # go ahead and map these interfaces to physical ASRs
         self.sync_asr_list_with_db(context, self.asr_cfg_info.get_asr_list())
         
-        rport_qry = context.session.query(CiscoPhysicalRouter)
-        for db_asr, port in zip(rport_qry, port_list):            
+        phy_router_qry = context.session.query(CiscoPhysicalRouter).all()
+
+        for db_asr, port in zip(phy_router_qry, port_list):            
             port_binding = CiscoPhyRouterPortBinding(port_id=port['id'],
                                                      router_id=router_id,
                                                      phy_router_id=db_asr.id)
-            context.session.add(port_binding)
+
+            with context.session.begin(subtransactions=True):
+                context.session.add(port_binding)
         
 
         return info
