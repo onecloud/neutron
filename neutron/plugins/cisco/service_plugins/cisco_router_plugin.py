@@ -138,6 +138,9 @@ class CiscoPhyRouterPortBinding(model_base.BASEV2):
                         sa.ForeignKey('ports.id', ondelete="CASCADE"),
                         primary_key=True)
 
+    subnet_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("subnets.id", ondelete='CASCADE'))
+
     router_id = sa.Column(sa.String(36),
                           sa.ForeignKey("routers.id", ondelete='CASCADE'))
 
@@ -284,6 +287,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
         for db_asr, port in zip(phy_router_qry, port_list):            
             port_binding = CiscoPhyRouterPortBinding(port_id=port['id'],
+                                                     subnet_id=port['fixed_ips'][0]['subnet_id'],
                                                      router_id=router_id,
                                                      phy_router_id=db_asr.id)
 
