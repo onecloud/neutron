@@ -336,7 +336,20 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 notifier_api.CONF.default_notification_level,
                                 {'router_interface': ha_info})
         return info
-        
+
+    def get_sync_data(self, context, router_ids=None, active=None):
+        """Query routers and their related floating_ips, interfaces."""
+        with context.session.begin(subtransactions=True):
+            routers = self._get_sync_routers(context,
+                                             router_ids=router_ids,
+                                             active=active)
+            router_ids = [router['id'] for router in routers]
+            floating_ips = self._get_sync_floating_ips(context, router_ids)
+            interfaces = self.get_sync_interfaces(context, router_ids)
+            ha_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                     constants.DEVICE_OWNER_ROUTER_HA_INTF)
+            interfaces.append(ha_interfaces)
+        return self._process_sync_data(routers, interfaces, floating_ips)
 
     @property
     def _core_plugin(self):

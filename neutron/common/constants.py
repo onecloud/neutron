@@ -29,6 +29,7 @@ FLOATINGIP_STATUS_ACTIVE = 'ACTIVE'
 FLOATINGIP_STATUS_DOWN = 'DOWN'
 FLOATINGIP_STATUS_ERROR = 'ERROR'
 
+DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
 DEVICE_OWNER_ROUTER_INTF = "network:router_interface"
 DEVICE_OWNER_ROUTER_GW = "network:router_gateway"
 DEVICE_OWNER_FLOATINGIP = "network:floatingip"
