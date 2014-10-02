@@ -624,10 +624,6 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
             return []
 
 
-
-
-
-
 class CiscoPhysicalRouter(model_base.BASEV2, models_v2.HasId):
     """Represents a physical cisco router."""
 
@@ -716,9 +712,9 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
             for ha_intf in ha_interfaces:
                 port_id = ha_intf['id']
-                phy_port_qry = context.session.query(CiscoPhyRouterPortBinding)
+                phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
                 phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == port_id)
-                phy_port_qry = phy_port_qry.join(CiscoPhysicalRouter)
+                phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == CiscoPhysicalRouter.id)
                 ha_intf['phy_port_binding'] = phy_port_qry
                 LOG.error("WWWWWWW phy_port_qry: %s" % (phy_port_qry))
                 
@@ -733,8 +729,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         Adds information about hosting device as well as trunking.
         """
         with context.session.begin(subtransactions=True):
-            sync_data = (super(L3RouterApplianceDBMixin, self).
-                         get_sync_data(context, router_ids, active))
+            sync_data = self.get_sync_data(context, router_ids, active)
 
             for router in sync_data:
                 self._add_type_and_hosting_device_info(context, router)
