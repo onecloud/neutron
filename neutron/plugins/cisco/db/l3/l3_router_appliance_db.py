@@ -714,7 +714,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 port_id = ha_intf['id']
                 phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
                 phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == port_id)
-                phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == CiscoPhysicalRouter.id).all()
+                phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.phy_router_id == CiscoPhysicalRouter.id).all()
                 ha_intf['phy_port_binding'] = phy_port_qry
                 LOG.error("WWWWWWW phy_port_qry: %s" % (phy_port_qry))
                 
