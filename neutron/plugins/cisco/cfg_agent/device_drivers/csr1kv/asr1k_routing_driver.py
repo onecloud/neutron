@@ -14,6 +14,8 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
 
+from neutron.common import constants
+
 LOG = logging.getLogger(__name__)
 
 
@@ -28,6 +30,7 @@ class ASR1kConfigInfo(object):
         self.asr_list = None
         self._create_asr_device_dictionary()
         self._db_synced = False
+        self._asr_name_dict = {}
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -57,7 +60,15 @@ class ASR1kConfigInfo(object):
 
                     asr_entry['order'] = int(asr_entry['order'])
 
+                    self._asr_name_dict[asr_entry['name']] = asr_entry
+
         LOG.error("ASR dict: %s" % self.asr_dict)
+
+    def get_asr_by_name(self, asr_name):
+        if asr_name in self._asr_name_dict:
+            return self._asr_name_dict[asr_name]
+        else:
+            return None
 
     def get_first_asr(self):
         return self.asr_dict.values()[0]
@@ -84,13 +95,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _get_asr_list(self):
         return self._asr_config.get_asr_list()
 
+    def _get_asr_ent_from_port(self, port):
+        asr_name = port['phy_router'].name
+        asr_ent = self._asr_config.get_asr_by_name(asr_name)
+        return asr_ent
 
+    def _port_is_hsrp(self, port):
+        return port['device_owner'] == constants.DEVICE_OWNER_ROUTER_HA_INTF
 
 
     ###### Public Functions ########
 
     def internal_network_added(self, ri, port):
-        self._csr_create_subinterface(ri, port, False)
+        gw_ip = port['subnet']['gateway_ip']
+        self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
@@ -101,41 +119,52 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     
 
 
-
-
     ###### Internal "Preparation" Functions ########
 
     def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
+
+        if not self._port_is_hsrp(port):
+            LOG.info("ignoring create non-HSRP interface")
+            return
+        
         vrf_name = self._csr_get_vrf_name(ri)
         ip_cidr = port['ip_cidr']
         netmask = netaddr.IPNetwork(ip_cidr).netmask
         
-        if is_external is True:
-            gateway_ip = gw_ip
-        else:
-            gateway_ip = ip_cidr.split('/')[0]
+        gateway_ip = gw_ip
         
         vlan = self._get_interface_vlan_from_hosting_port(port)
-
-        for asr_ent in self._get_asr_list():
-            tmp_ip = netaddr.IPAddress(gateway_ip)
-            tmp_ip = tmp_ip.__add__(asr_ent['order'] + self.hsrp_real_ip_base) # increment IP addr by count to get real HSRP ips
-            tmp_ip = str(tmp_ip)
         
-            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
-            self._create_subinterface(subinterface, vlan, vrf_name,
-                                      tmp_ip, netmask, asr_ent, is_external)
+        asr_ent = self._get_asr_ent_from_port(port)
 
-            self._csr_add_ha_HSRP(ri, port, gateway_ip, is_external) # Always do HSRP
+        hsrp_ip = port['fixed_ips'][0]['ip_address']
+        
+        subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+        self._create_subinterface(subinterface, vlan, vrf_name,
+                                  hsrp_ip, netmask, asr_ent, is_external)
+        
+        self._csr_add_ha_HSRP(ri, port, gateway_ip, is_external) # Always do HSRP
 
 
     def _csr_remove_subinterface(self, port):
-        for asr_ent in self._get_asr_list():
-            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
-            self._remove_subinterface(subinterface, asr_ent)
+
+        if not self._port_is_hsrp(port):
+            LOG.info("ignoring create non-HSRP interface")
+            return
+
+        asr_name = port['phy_router'].name
+        asr_ent = self.asr_cfg_info.get_asr_by_name(asr_name)
+
+        subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+        self._remove_subinterface(subinterface, asr_ent)
 
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
+        if not self._port_is_hsrp(ex_port):
+            LOG.info("ignoring non-HSRP interface")
+            return
+
+
         vrf_name = self._csr_get_vrf_name(ri)
         in_vlan = self._get_interface_vlan_from_hosting_port(port)
         acl_no = 'acl_' + str(in_vlan)
@@ -143,42 +172,48 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
 
-        for asr_ent in self._get_asr_list():
-            inner_intfc = self._get_interface_name_from_hosting_port(port, asr_ent)
-            outer_intfc = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
-            self._nat_rules_for_internet_access(acl_no, internal_net,
-                                                netmask, inner_intfc,
-                                                outer_intfc, vrf_name, asr_ent)
+        asr_ent = self._get_asr_ent_from_port(port)
+
+        inner_intfc = self._get_interface_name_from_hosting_port(port, asr_ent)
+        outer_intfc = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
+        self._nat_rules_for_internet_access(acl_no, internal_net,
+                                            netmask, inner_intfc,
+                                            outer_intfc, vrf_name, asr_ent)
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
 
-        for asr_ent in self._get_asr_list():
+        if not self._port_is_hsrp(ex_port):
+            LOG.info("ignoring non-HSRP interface")
+            return
 
-            acls = []
-            #First disable nat in all inner ports
-            for port in ports:
-                in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
-                inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-                acls.append("acl_" + str(inner_vlan))
-                self._remove_interface_nat(in_intfc_name, 'inside', asr_ent)
+        asr_ent = self._get_asr_ent_from_port(ex_port)
 
-                #Wait for two second
-                LOG.debug("Sleep for 2 seconds before clearing NAT rules")
-                time.sleep(2)
-
-                #Clear the NAT translation table
-                self._remove_dyn_nat_translations(asr_ent)
-                
-                # Remove dynamic NAT rules and ACLs
-                vrf_name = self._csr_get_vrf_name(ri)
-                ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
-                for acl in acls:
-                    self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
+        acls = []
+        #First disable nat in all inner ports
+        for port in ports:
+            in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
+            inner_vlan = self._get_interface_vlan_from_hosting_port(port)
+            acls.append("acl_" + str(inner_vlan))
+            self._remove_interface_nat(in_intfc_name, 'inside', asr_ent)
+            
+            #Wait for two second
+            LOG.debug("Sleep for 2 seconds before clearing NAT rules")
+            time.sleep(2)
+            
+            #Clear the NAT translation table
+            self._remove_dyn_nat_translations(asr_ent)
+            
+            # Remove dynamic NAT rules and ACLs
+            vrf_name = self._csr_get_vrf_name(ri)
+            ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
+            for acl in acls:
+                self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
 
 
     def _csr_add_default_route(self, ri, gw_ip):
         return # disable for now until next_hop issue resolved
         vrf_name = self._csr_get_vrf_name(ri)
+
         for asr_ent in self._get_asr_list():
             self._add_default_static_route(gw_ip, vrf_name, asr_ent)
 
@@ -189,23 +224,33 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._remove_default_static_route(gw_ip, vrf_name, asr_ent)
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+
+        if not self._port_is_hsrp(ex_gw_port):
+            LOG.info("ignoring non-HSRP interface")
+            return
+
         vrf_name = self._csr_get_vrf_name(ri)
-        for asr_ent in self._get_asr_list():
-            self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
+        asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        vrf_name = self._csr_get_vrf_name(ri)
 
-        for asr_ent in self._get_asr_list():
-            out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
-            # First remove NAT from outer interface
-            self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
-            #Clear the NAT translation table
-            self._remove_dyn_nat_translations(asr_ent)
-            #Remove the floating ip
-            self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
-            #Enable NAT on outer interface
-            self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
+        if not self._port_is_hsrp(ex_gw_port):
+            LOG.info("ignoring non-HSRP interface")
+            return
+
+        vrf_name = self._csr_get_vrf_name(ri)
+        asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+
+        out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
+        # First remove NAT from outer interface
+        self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
+        #Clear the NAT translation table
+        self._remove_dyn_nat_translations(asr_ent)
+        #Remove the floating ip
+        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
+        #Enable NAT on outer interface
+        self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
 
     def _csr_update_routing_table(self, ri, action, route):
         vrf_name = self._csr_get_vrf_name(ri)
@@ -233,14 +278,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._remove_vrf(vrf_name, asr_ent)
 
     def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
+
+        if not self._port_is_hsrp(port):
+            LOG.info("ignoring non-HSRP interface")
+            return
+
         vlan = self._get_interface_vlan_from_hosting_port(port)
         group = vlan
         vrf_name = self._csr_get_vrf_name(ri)
+
+        asr_ent = self._get_asr_ent_from_port(port)
         
-        for asr_ent in self._get_asr_list():
-            priority = asr_ent['order']
-            subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
-            self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent, is_external)
+        priority = asr_ent['order']
+        subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+        self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, asr_ent, is_external)
 
 
 
