@@ -14,8 +14,6 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
 
-from neutron.plugins.cisco.service_plugins import cisco_router_plugin as cisco_rp
-
 LOG = logging.getLogger(__name__)
 
 
@@ -70,46 +68,6 @@ class ASR1kConfigInfo(object):
                                    key=lambda ent:ent['order'])
 
         return self.asr_list
-
-
-    def sync_asr_list_with_db(self, context):
-
-        if self._db_synced is True:
-            return
-        
-        db_names = []
-        cfg_names = []
-        missing_db_asr_list = []
-        asr_list = self.get_asr_list()
-
-        rport_qry = context.session.query(cisco_rp.CiscoPhysicalRouter)
-
-        # Build list of names that exist in cfg
-        for asr in asr_list:
-            cfg_names.append(asr['name'])
-
-        # Build list of names that exist in DB
-        # Build list of db objects that do not have names in cfg
-        for db_asr in rport_qry:
-            db_names.append(db_asr.name)
-            if db_asr.name not in cfg_names:
-                missing_db_asr_list.append(db_asr)
-
-        # Update DB
-        with context.session.begin(subtransactions=True):
-
-            # Add ASRs from cfg with names not in db 
-            for asr in asr_list:
-                if asr['name'] not in db_names:
-                    new_db_asr = cisco_rp.CiscoPhysicalRouter(name=asr['name'])
-                    context.session.add(new_db_asr)
-
-            # Delete missing ASRs from db
-            for missing_asr in missing_db_asr_list:
-                # context.session.delete(missing_asr)
-                missing_asr.delete()
-        
-        self._db_synced = True
 
 
 class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):

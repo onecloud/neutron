@@ -168,6 +168,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         self._setup_device_handling()
 
         self.asr_cfg_info = asr1k_driver.ASR1kConfigInfo()
+        self._db_synced = False
 
     def setup_rpc(self):
         # RPC support
@@ -192,6 +193,45 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         return ("Cisco Router Service Plugin for basic L3 forwarding"
                 " between (L2) Neutron networks and access to external"
                 " networks via a NAT gateway.")
+
+    def sync_asr_list_with_db(self, context, asr_list):
+
+        if self._db_synced is True:
+            return
+        
+        db_names = []
+        cfg_names = []
+        missing_db_asr_list = []
+        #asr_list = self.get_asr_list()
+
+        rport_qry = context.session.query(CiscoPhysicalRouter)
+
+        # Build list of names that exist in cfg
+        for asr in asr_list:
+            cfg_names.append(asr['name'])
+
+        # Build list of names that exist in DB
+        # Build list of db objects that do not have names in cfg
+        for db_asr in rport_qry:
+            db_names.append(db_asr.name)
+            if db_asr.name not in cfg_names:
+                missing_db_asr_list.append(db_asr)
+
+        # Update DB
+        with context.session.begin(subtransactions=True):
+
+            # Add ASRs from cfg with names not in db 
+            for asr in asr_list:
+                if asr['name'] not in db_names:
+                    new_db_asr = CiscoPhysicalRouter(name=asr['name'])
+                    context.session.add(new_db_asr)
+
+            # Delete missing ASRs from db
+            for missing_asr in missing_db_asr_list:
+                # context.session.delete(missing_asr)
+                missing_asr.delete()
+        
+        self._db_synced = True
 
     def add_router_interface(self, context, router_id, interface_info):
         info = super(PhysicalCiscoRouterPlugin, self).add_router_interface(context,
@@ -238,7 +278,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 {'router_interface': ha_info})
 
         # go ahead and map these interfaces to physical ASRs
-        self.asr_cfg_info.sync_asr_list_with_db(context)
+        self.sync_asr_list_with_db(context, self.asr_cfg_info.get_asr_list())
         
         rport_qry = context.session.query(CiscoPhysicalRouter)
         for db_asr, port in zip(rport_qry, port_list):            
