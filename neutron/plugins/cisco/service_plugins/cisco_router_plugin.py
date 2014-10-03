@@ -377,7 +377,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                 router.gw_port = None
                 context.session.add(router)
             
-            subnet = gw_port['subnet']
+            subnet_id = gw_port['fixed_ips'][0]['subnet_id']
+            subnet = self._core_plugin._get_subnet(context, subnet_id)
 
             self._core_plugin.delete_port(context.elevated(),
                                           gw_port['id'],
