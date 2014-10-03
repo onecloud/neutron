@@ -243,19 +243,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 notifier_api.CONF.default_notification_level,
                                 {'router_interface': ha_info})
 
-        # go ahead and map these interfaces to physical ASRs
-        self.sync_asr_list_with_db(context, self.asr_cfg_info.get_asr_list())
-        
-        phy_router_qry = context.session.query(l3_router_appliance_db.CiscoPhysicalRouter).all()
-
-        for db_asr, port in zip(phy_router_qry, port_list):            
-            port_binding = l3_router_appliance_db.CiscoPhyRouterPortBinding(port_id=port['id'],
-                                                                            subnet_id=port['fixed_ips'][0]['subnet_id'],
-                                                                            router_id=router_id,
-                                                                            phy_router_id=db_asr.id)
-
-            with context.session.begin(subtransactions=True):
-                context.session.add(port_binding)
+        self._bind_hsrp_interfaces_to_router(context, router_id,  port_list)
 
 
     def _delete_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
@@ -322,6 +310,23 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
         return info
 
+
+    def _bind_hsrp_interfaces_to_router(self, context, router_id,  port_list):
+         # go ahead and map these interfaces to physical ASRs
+        self.sync_asr_list_with_db(context, self.asr_cfg_info.get_asr_list())
+        
+        phy_router_qry = context.session.query(l3_router_appliance_db.CiscoPhysicalRouter).all()
+
+        for db_asr, port in zip(phy_router_qry, port_list):            
+            port_binding = l3_router_appliance_db.CiscoPhyRouterPortBinding(port_id=port['id'],
+                                                                            subnet_id=port['fixed_ips'][0]['subnet_id'],
+                                                                            router_id=router_id,
+                                                                            phy_router_id=db_asr.id)
+
+            with context.session.begin(subtransactions=True):
+                context.session.add(port_binding)
+        
+
     def _create_router_gw_hsrp_interfaces(self, context, router, network_id, main_gw_port):
         # Port has no 'tenant-id', as it is hidden from user
 
@@ -349,7 +354,9 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                            network_id)
                 
                 raise n_exc.BadRequest(resource='router', msg=msg)
-            
+
+        self._bind_hsrp_interfaces_to_router(context, router['id'],  port_list)
+
     
     def _update_router_gw_info(self, context, router_id, info, router=None):
         # TODO(salvatore-orlando): guarantee atomic behavior also across
