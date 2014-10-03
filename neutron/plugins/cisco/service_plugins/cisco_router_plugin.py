@@ -385,13 +385,13 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                 context.session.add(router)
             
             subnet_id = gw_port['fixed_ips'][0]['subnet_id']
-            subnet = self._core_plugin._get_subnet(context, subnet_id)
+            subnet = self._core_plugin._get_subnet(context.elevated(), subnet_id)
 
             self._core_plugin.delete_port(context.elevated(),
                                           gw_port['id'],
                                           l3_port_check=False)
 
-            self._delete_hsrp_interfaces(context, router_id, subnet, DEVICE_OWNER_ROUTER_HA_GW)
+            self._delete_hsrp_interfaces(context.elevated(), router_id, subnet, DEVICE_OWNER_ROUTER_HA_GW)
 
 
         if network_id is not None and (gw_port is None or
