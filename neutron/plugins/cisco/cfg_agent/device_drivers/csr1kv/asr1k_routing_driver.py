@@ -101,8 +101,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         return asr_ent
 
     def _port_is_hsrp(self, port):
-        return port['device_owner'] == constants.DEVICE_OWNER_ROUTER_HA_INTF
-
+        hsrp_types = [constants.DEVICE_OWNER_ROUTER_HA_GW, constants.DEVICE_OWNER_ROUTER_HA_INTF]
+        return port['device_owner'] in hsrp_types
+        
 
     ###### Public Functions ########
 

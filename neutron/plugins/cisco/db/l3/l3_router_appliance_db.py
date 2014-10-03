@@ -710,6 +710,14 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
 
+            ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                        l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+            gw_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                     l3_constants.DEVICE_OWNER_ROUTER_GW)
+
+            ha_interfaces += gw_interfaces
+            ha_interfaces += ha_gw_interfaces
+
             for ha_intf in ha_interfaces:
                 port_id = ha_intf['id']
                 phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
