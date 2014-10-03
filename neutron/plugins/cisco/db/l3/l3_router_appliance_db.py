@@ -714,11 +714,10 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 port_id = ha_intf['id']
                 phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
                 phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == port_id)
-                port_binding_db, phy_router_db = phy_port_qry.filter(CiscoPhyRouterPortBinding.phy_router_id == CiscoPhysicalRouter.id).all()
+                port_binding_db, phy_router_db = phy_port_qry.filter(CiscoPhyRouterPortBinding.phy_router_id == CiscoPhysicalRouter.id).first()
+
                 ha_intf['port_binding_db'] = port_binding_db
-                ha_intf['phy_router_db'] = phy_router_db
-                LOG.error("WWWWWWW phy_port_qry: %s" % (phy_port_qry))
-                
+                ha_intf['phy_router_db'] = phy_router_db                
 
             interfaces += ha_interfaces
         return self._process_sync_data(routers, interfaces, floating_ips)

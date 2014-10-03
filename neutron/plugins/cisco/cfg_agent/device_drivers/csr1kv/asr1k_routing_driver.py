@@ -28,9 +28,9 @@ class ASR1kConfigInfo(object):
     def __init__(self):
         self.asr_dict = {}
         self.asr_list = None
-        self._create_asr_device_dictionary()
-        self._db_synced = False
         self._asr_name_dict = {}
+        self._db_synced = False
+        self._create_asr_device_dictionary()
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -96,7 +96,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         return self._asr_config.get_asr_list()
 
     def _get_asr_ent_from_port(self, port):
-        asr_name = port['phy_router'].name
+        asr_name = port['phy_router_db']['name']
         asr_ent = self._asr_config.get_asr_by_name(asr_name)
         return asr_ent
 
