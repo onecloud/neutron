@@ -37,9 +37,7 @@ from neutron.db import models_v2
 from neutron.openstack.common import log as logging
 from neutron.common import exceptions as n_exc
 from neutron.extensions import l3
-
-import sqlalchemy as sa
-from sqlalchemy import orm
+from neutron.common import constants as common_constants
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1k_driver)
 
@@ -391,7 +389,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                           gw_port['id'],
                                           l3_port_check=False)
 
-            self._delete_hsrp_interfaces(context.elevated(), router_id, subnet, DEVICE_OWNER_ROUTER_HA_GW)
+            self._delete_hsrp_interfaces(context.elevated(), router_id, subnet, common_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
 
         if network_id is not None and (gw_port is None or
@@ -418,7 +416,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                 raise l3.RouterInUse(router_id=id)
 
             device_filter = {'device_id': [id],
-                             'device_owner': [constants.DEVICE_OWNER_ROUTER_INTF]}
+                             'device_owner': [common_constants.DEVICE_OWNER_ROUTER_INTF]}
             ports = self._core_plugin.get_ports_count(context.elevated(),
                                                       filters=device_filter)
             if ports:
@@ -435,8 +433,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             # Delete the gw port after the router has been removed to
             # avoid a constraint violation.
             device_filter = {'device_id': [id],
-                             'device_owner': [constants.DEVICE_OWNER_ROUTER_GW,
-                                              constants.DEVICE_OWNER_ROUTER_HA_GW]}
+                             'device_owner': [common_constants.DEVICE_OWNER_ROUTER_GW,
+                                              common_constants.DEVICE_OWNER_ROUTER_HA_GW]}
             ports = self._core_plugin.get_ports(context.elevated(),
                                                 filters=device_filter)
             for port in ports:
