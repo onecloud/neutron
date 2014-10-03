@@ -355,7 +355,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                 
                 raise n_exc.BadRequest(resource='router', msg=msg)
 
-        self._bind_hsrp_interfaces_to_router(context, router['id'],  port_list)
+        self._bind_hsrp_interfaces_to_router(context, router['id'],  port_list[1:])
 
     
     def _update_router_gw_info(self, context, router_id, info, router=None):
@@ -404,7 +404,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                   subnet['cidr'])
 
             self._create_router_gw_port(context, router, network_id)
-            self._create_router_gw_hsrp_interfaces(context, router, network_id, gw_port)
+            self._create_router_gw_hsrp_interfaces(context, router, network_id, router.gw_port)
 
 
     def delete_router(self, context, id):

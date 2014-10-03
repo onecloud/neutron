@@ -707,15 +707,11 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             router_ids = [router['id'] for router in routers]
             floating_ips = self._get_sync_floating_ips(context, router_ids)
             interfaces = self.get_sync_interfaces(context, router_ids)
+
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
-
             ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
                                                         l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
-            gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                     l3_constants.DEVICE_OWNER_ROUTER_GW)
-
-            ha_interfaces += gw_interfaces
             ha_interfaces += ha_gw_interfaces
 
             for ha_intf in ha_interfaces:
