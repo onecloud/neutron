@@ -118,7 +118,7 @@ class CiscoRoutingPluginApi(proxy.RpcProxy):
         return n_rpc.PluginRpcDispatcher([self])
 
 
-class RoutingServiceHelper():
+class RoutingServiceHelper(object):
 
 
     BASE_RPC_API_VERSION = '1.1'

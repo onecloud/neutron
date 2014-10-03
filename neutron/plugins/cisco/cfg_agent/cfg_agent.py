@@ -113,7 +113,7 @@ class CiscoCfgAgent(manager.Manager):
                           "resources.")),
         cfg.StrOpt('routing_svc_helper_class',
                    default='neutron.plugins.cisco.cfg_agent.service_helpers'
-                           '.routing_svc_helper.RoutingServiceHelper',
+                           '.routing_svc_helper.PhysicalRoutingServiceHelper',
                    help=_("Path of the routing service helper class.")),
     ]
 
