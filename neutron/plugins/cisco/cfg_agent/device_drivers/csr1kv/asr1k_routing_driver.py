@@ -150,7 +150,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _csr_remove_subinterface(self, port):
 
         if not self._port_is_hsrp(port):
-            LOG.info("ignoring create non-HSRP interface")
+            LOG.info("ignoring remove non-HSRP interface")
             return
 
         asr_ent = self._get_asr_ent_from_port(port)
@@ -160,8 +160,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
-        if not self._port_is_hsrp(ex_port):
-            LOG.info("ignoring non-HSRP interface")
+        if not self._port_is_hsrp(port):
+            LOG.info("ignoring add internalnw_nat non-HSRP interface")
             return
 
 
@@ -182,15 +182,16 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
 
-        if not self._port_is_hsrp(ex_port):
-            LOG.info("ignoring non-HSRP interface")
-            return
-
-        asr_ent = self._get_asr_ent_from_port(ex_port)
-
         acls = []
         #First disable nat in all inner ports
         for port in ports:
+
+            if not self._port_is_hsrp(port):
+                LOG.info("ignoring remove_internalnw_nat on non-HSRP interface")
+                continue
+                
+            asr_ent = self._get_asr_ent_from_port(port)
+
             in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
             acls.append("acl_" + str(inner_vlan))
@@ -226,7 +227,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
         if not self._port_is_hsrp(ex_gw_port):
-            LOG.info("ignoring non-HSRP interface")
+            LOG.info("ignoring add floating ip non-HSRP interface")
             return
 
         vrf_name = self._csr_get_vrf_name(ri)
@@ -236,7 +237,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
         if not self._port_is_hsrp(ex_gw_port):
-            LOG.info("ignoring non-HSRP interface")
+            LOG.info("ignoring remove floating ip non-HSRP interface")
             return
 
         vrf_name = self._csr_get_vrf_name(ri)
@@ -280,7 +281,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
 
         if not self._port_is_hsrp(port):
-            LOG.info("ignoring non-HSRP interface")
+            LOG.info("ignoring add ha non-HSRP interface")
             return
 
         vlan = self._get_interface_vlan_from_hosting_port(port)
