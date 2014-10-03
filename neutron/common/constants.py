@@ -38,6 +38,7 @@ DEVICE_OWNER_DHCP = "network:dhcp"
 
 FLOATINGIP_KEY = '_floatingips'
 INTERFACE_KEY = '_interfaces'
+HA_GW_KEY = '_ha_gw_interfaces'
 METERING_LABEL_KEY = '_metering_labels'
 
 IPv4 = 'IPv4'

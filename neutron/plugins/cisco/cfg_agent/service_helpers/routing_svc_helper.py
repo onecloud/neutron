@@ -120,13 +120,13 @@ class CiscoRoutingPluginApi(proxy.RpcProxy):
 
 class RoutingServiceHelper():
 
-    _use_vm = False
 
     BASE_RPC_API_VERSION = '1.1'
     def create_rpc_dispatcher(self):
         return n_rpc.PluginRpcDispatcher([self])
 
     def __init__(self, host, conf, cfg_agent):
+        self._use_vm = True
         self.conf = conf
         self.cfg_agent = cfg_agent
         self.context = n_context.get_admin_context_without_session()
@@ -667,3 +667,72 @@ class RoutingServiceHelper():
             LOG.error(_("Ignoring multiple IPs on router port %s"), port['id'])
         prefixlen = netaddr.IPNetwork(port['subnet']['cidr']).prefixlen
         port['ip_cidr'] = "%s/%s" % (ips[0]['ip_address'], prefixlen)
+
+
+
+
+
+class PhysicalRoutingServiceHelper(RoutingServiceHelper):
+
+    def __init__(self, host, conf, cfg_agent):
+        super(PhysicalRoutingServiceHelper, self).__init__(host, conf, cfg_agent)
+        self._use_vm = False
+    
+    def _process_router(self, ri):
+        """Process a router, apply latest configuration and update router_info.
+
+        Get the router dict from  RouterInfo and proceed to detect changes
+        from the last known state. When new ports or deleted ports are
+        detected, `internal_network_added()` or `internal_networks_removed()`
+        are called accordingly. Similarly changes in ex_gw_port causes
+         `external_gateway_added()` or `external_gateway_removed()` calls.
+        Next, floating_ips and routes are processed. Also, latest state is
+        stored in ri.internal_ports and ri.ex_gw_port for future comparisons.
+
+        :param ri : RouterInfo object of the router being processed.
+        :return:None
+        :raises: neutron.plugins.cisco.cfg_agent.cfg_exceptions.DriverException
+        if the configuration operation fails.
+        """
+        try:
+            ex_gw_port = ri.router.get('gw_port')
+            ri.ha_info = ri.router.get('ha_info', None)
+            internal_ports = ri.router.get(l3_constants.INTERFACE_KEY, [])
+            gw_ports = ri.router.get(l3_constants.HA_GW_KEY, [])
+            existing_port_ids = set([p['id'] for p in ri.internal_ports])
+            current_port_ids = set([p['id'] for p in internal_ports
+                                    if p['admin_state_up']])
+            new_ports = [p for p in internal_ports
+                         if
+                         p['id'] in (current_port_ids - existing_port_ids)]
+            old_ports = [p for p in ri.internal_ports
+                         if p['id'] not in current_port_ids]
+
+            for p in new_ports:
+                self._set_subnet_info(p)
+                self._internal_network_added(ri, p, ex_gw_port)
+                ri.internal_ports.append(p)
+
+            for p in old_ports:
+                self._internal_network_removed(ri, p, ri.ex_gw_port)
+                ri.internal_ports.remove(p)
+
+            if ex_gw_port and not ri.ex_gw_port:
+                gw_ports.append(ex_gw_port)
+                for p in gw_ports:
+                    self._set_subnet_info(p)
+                    self._external_gateway_added(ri, p)
+            elif not ex_gw_port and ri.ex_gw_port:
+                gw_ports.append(ri.ex_gw_port)
+                for p in gw_ports:
+                    self._external_gateway_removed(ri, p)
+
+            if ex_gw_port:
+                self._process_router_floating_ips(ri, ex_gw_port)
+
+            ri.ex_gw_port = ex_gw_port
+            self._routes_updated(ri)
+        except cfg_exceptions.DriverException as e:
+            with excutils.save_and_reraise_exception():
+                self.updated_routers.update(ri.router_id)
+                LOG.error(e)
