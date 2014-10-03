@@ -33,9 +33,10 @@ from neutron.db import l3_db
 
 from neutron.openstack.common.notifier import api as notifier_api
 from neutron.api.v2 import attributes
-from neutron.db import model_base
 from neutron.db import models_v2
 from neutron.openstack.common import log as logging
+from neutron.common import exceptions as n_exc
+from neutron.extensions import l3
 
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -46,6 +47,8 @@ LOG = logging.getLogger(__name__)
 
 
 DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
+DEVICE_OWNER_ROUTER_HA_GW = "network:router_ha_gateway"
+
 
 # class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
 class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
@@ -208,18 +211,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         
         self._db_synced = True
 
-    def add_router_interface(self, context, router_id, interface_info):
-        info = super(PhysicalCiscoRouterPlugin, self).add_router_interface(context,
-                                                                           router_id,
-                                                                           interface_info)
-
-        
-        LOG.error("ZXCVWSAD finished parent add_router_interface, info:%s" % (info))
-
-        # If no exception has been raised, we're good to go            
-        subnet_id = info['subnet_id']
-        subnet = self._core_plugin._get_subnet(context, subnet_id)
-
+    def _create_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
         # Create HSRP standby interfaces
         port_list = []
         num_asr = len(self.asr_cfg_info.get_asr_list())
@@ -232,11 +224,10 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                  'mac_address': attributes.ATTR_NOT_SPECIFIED,
                  'admin_state_up': True,
                  'device_id': router_id,
-                 'device_owner': DEVICE_OWNER_ROUTER_HA_INTF,
+                 'device_owner': dev_owner,
                  'name': ''}})
 
             LOG.error("ZXCVWSAD added new port %s" % (asr_port))
-
             port_list.append(asr_port)
         
         for port in port_list:
@@ -265,9 +256,55 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
             with context.session.begin(subtransactions=True):
                 context.session.add(port_binding)
+
+
+    def _delete_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
+        # Delete HSRP standby interfaces
+        port_list = []
+        rport_qry = context.session.query(models_v2.Port)
+        asr_ports = rport_qry.filter_by(device_id=router_id,
+                                        device_owner=dev_owner,
+                                        network_id=subnet['network_id'])
+        for asr_port in asr_ports:
+            port_list.append(asr_port)
+            self._core_plugin.delete_port(context, asr_port['id'],
+                                          l3_port_check=False)
+            LOG.error("ZXCVWSAD deleted port %s" % (asr_port))
+
+        # don't notify if gw hsrp interfaces are deleted
+        if dev_owner == DEVICE_OWNER_ROUTER_HA_GW:
+            return
+            
+        for port in port_list:
+            self.l3_rpc_notifier.routers_updated(
+                context, [router_id], 'remove_router_interface')
+            ha_info = {'id': router_id,
+                       'tenant_id': subnet['tenant_id'],
+                       'port_id': port['id'],
+                       'subnet_id': subnet['id']}
+            notifier_api.notify(context,
+                                notifier_api.publisher_id('network'),
+                                'router.interface.delete',
+                                notifier_api.CONF.default_notification_level,
+                                {'router_interface': ha_info})
         
 
+    def add_router_interface(self, context, router_id, interface_info):
+        info = super(PhysicalCiscoRouterPlugin, self).add_router_interface(context,
+                                                                           router_id,
+                                                                           interface_info)
+
+        
+        LOG.error("ZXCVWSAD finished parent add_router_interface, info:%s" % (info))
+
+        # If no exception has been raised, we're good to go            
+        subnet_id = info['subnet_id']
+        subnet = self._core_plugin._get_subnet(context, subnet_id)
+
+        self._create_hsrp_interfaces(context, router_id, subnet, DEVICE_OWNER_ROUTER_HA_INTF)
+        
         return info
+
 
 
     def remove_router_interface(self, context, router_id, interface_info):
@@ -277,37 +314,130 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
         LOG.error("ZXCVWSAD finished parent remove_router_interface, info:%s" % (info))
 
-
         # If no exception has been raised, we're good to go            
         subnet_id = info['subnet_id']
         subnet = self._core_plugin._get_subnet(context, subnet_id)
+        
+        self._delete_hsrp_interfaces(context, router_id, subnet, DEVICE_OWNER_ROUTER_HA_INTF)
 
-        # Delete HSRP standby interfaces
-        port_list = []
-        rport_qry = context.session.query(models_v2.Port)
-        asr_ports = rport_qry.filter_by(device_id=router_id,
-                                        device_owner=DEVICE_OWNER_ROUTER_HA_INTF,
-                                        network_id=subnet['network_id'])
-        for asr_port in asr_ports:
-            port_list.append(asr_port)
-            self._core_plugin.delete_port(context, asr_port['id'],
-                                          l3_port_check=False)
-            LOG.error("ZXCVWSAD deleted port %s" % (asr_port))
-
-
-        for port in port_list:
-            self.l3_rpc_notifier.routers_updated(
-                context, [router_id], 'remove_router_interface')
-            ha_info = {'id': router_id,
-                       'tenant_id': subnet['tenant_id'],
-                       'port_id': port['id'],
-                       'subnet_id': subnet_id}
-            notifier_api.notify(context,
-                                notifier_api.publisher_id('network'),
-                                'router.interface.delete',
-                                notifier_api.CONF.default_notification_level,
-                                {'router_interface': ha_info})
         return info
+
+    def _create_router_gw_hsrp_interfaces(self, context, router, network_id, main_gw_port):
+        # Port has no 'tenant-id', as it is hidden from user
+
+        port_list = [main_gw_port]
+        num_asr = len(self.asr_cfg_info.get_asr_list())
+        for asr_idx in range(0, num_asr):
+
+            gw_port = self._core_plugin.create_port(context.elevated(), {
+            'port': {'tenant_id': '',  # intentionally not set
+                     'network_id': network_id,
+                     'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                     'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
+                     'device_id': router['id'],
+                     'device_owner': DEVICE_OWNER_ROUTER_HA_GW,
+                     'admin_state_up': True,
+                     'name': ''}})
+
+            port_list.append(gw_port)
+            
+            if not gw_port['fixed_ips']:
+                for deleted_port in port_list:
+                    self._core_plugin.delete_port(context.elevated(), deleted_port['id'],
+                                                  l3_port_check=False)
+                    msg = (_('Not enough IPs available for external network %s') %
+                           network_id)
+                
+                raise n_exc.BadRequest(resource='router', msg=msg)
+            
+    
+    def _update_router_gw_info(self, context, router_id, info, router=None):
+        # TODO(salvatore-orlando): guarantee atomic behavior also across
+        # operations that span beyond the model classes handled by this
+        # class (e.g.: delete_port)
+        router = router or self._get_router(context, router_id)
+        gw_port = router.gw_port
+        # network_id attribute is required by API, so it must be present
+        network_id = info['network_id'] if info else None
+        if network_id:
+            network_db = self._core_plugin._get_network(context, network_id)
+            if not network_db.external:
+                msg = _("Network %s is not a valid external "
+                        "network") % network_id
+                raise n_exc.BadRequest(resource='router', msg=msg)
+
+        # figure out if we need to delete existing port
+        if gw_port and gw_port['network_id'] != network_id:
+            fip_count = self.get_floatingips_count(context.elevated(),
+                                                   {'router_id': [router_id]})
+            if fip_count:
+                raise l3.RouterExternalGatewayInUseByFloatingIp(
+                    router_id=router_id, net_id=gw_port['network_id'])
+            with context.session.begin(subtransactions=True):
+                router.gw_port = None
+                context.session.add(router)
+            
+            subnet = gw_port['subnet']
+
+            self._core_plugin.delete_port(context.elevated(),
+                                          gw_port['id'],
+                                          l3_port_check=False)
+
+            self._delete_hsrp_interfaces(context, router_id, subnet, DEVICE_OWNER_ROUTER_HA_GW)
+
+
+        if network_id is not None and (gw_port is None or
+                                       gw_port['network_id'] != network_id):
+            subnets = self._core_plugin._get_subnets_by_network(context,
+                                                                network_id)
+            for subnet in subnets:
+                self._check_for_dup_router_subnet(context, router_id,
+                                                  network_id, subnet['id'],
+                                                  subnet['cidr'])
+
+            self._create_router_gw_port(context, router, network_id)
+            self._create_router_gw_hsrp_interfaces(context, router, network_id, gw_port)
+
+
+    def delete_router(self, context, id):
+        with context.session.begin(subtransactions=True):
+            router = self._get_router(context, id)
+
+            # Ensure that the router is not used
+            fips = self.get_floatingips_count(context.elevated(),
+                                              filters={'router_id': [id]})
+            if fips:
+                raise l3.RouterInUse(router_id=id)
+
+            device_filter = {'device_id': [id],
+                             'device_owner': [constants.DEVICE_OWNER_ROUTER_INTF]}
+            ports = self._core_plugin.get_ports_count(context.elevated(),
+                                                      filters=device_filter)
+            if ports:
+                raise l3.RouterInUse(router_id=id)
+
+            #TODO(nati) Refactor here when we have router insertion model
+            vpnservice = manager.NeutronManager.get_service_plugins().get(
+                constants.VPN)
+            if vpnservice:
+                vpnservice.check_router_in_use(context, id)
+
+            context.session.delete(router)
+
+            # Delete the gw port after the router has been removed to
+            # avoid a constraint violation.
+            device_filter = {'device_id': [id],
+                             'device_owner': [constants.DEVICE_OWNER_ROUTER_GW,
+                                              constants.DEVICE_OWNER_ROUTER_HA_GW]}
+            ports = self._core_plugin.get_ports(context.elevated(),
+                                                filters=device_filter)
+            for port in ports:
+                self._core_plugin._delete_port(context.elevated(),
+                                               port['id'])
+
+        self.l3_rpc_notifier.router_deleted(context, id)
+
+
 
 
     @property

@@ -152,8 +152,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.info("ignoring create non-HSRP interface")
             return
 
-        asr_name = port['phy_router'].name
-        asr_ent = self.asr_cfg_info.get_asr_by_name(asr_name)
+        asr_ent = self._get_asr_ent_from_port(port)
 
         subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
         self._remove_subinterface(subinterface, asr_ent)
