@@ -208,7 +208,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             vrf_name = self._csr_get_vrf_name(ri)
             ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
             for acl in acls:
-                self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
+                #self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
+                self._remove_dyn_nat_rule(acl, in_intfc_name, vrf_name, asr_ent)
 
 
     def _csr_add_default_route(self, ri, gw_ip):
