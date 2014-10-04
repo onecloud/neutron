@@ -226,32 +226,34 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
-        if not self._port_is_hsrp(ex_gw_port):
-            LOG.info("ignoring add floating ip non-HSRP interface")
-            return
-
-        vrf_name = self._csr_get_vrf_name(ri)
-        asr_ent = self._get_asr_ent_from_port(ex_gw_port)
-        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
+        #if not self._port_is_hsrp(ex_gw_port):
+        #    LOG.info("ignoring add floating ip non-HSRP interface")
+        #    return
+        
+        for asr_ent in self._get_asr_list():
+            vrf_name = self._csr_get_vrf_name(ri)
+            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
-        if not self._port_is_hsrp(ex_gw_port):
-            LOG.info("ignoring remove floating ip non-HSRP interface")
-            return
-
-        vrf_name = self._csr_get_vrf_name(ri)
-        asr_ent = self._get_asr_ent_from_port(ex_gw_port)
-
-        out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
-        # First remove NAT from outer interface
-        self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
-        #Clear the NAT translation table
-        self._remove_dyn_nat_translations(asr_ent)
-        #Remove the floating ip
-        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
-        #Enable NAT on outer interface
-        self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
+        #if not self._port_is_hsrp(ex_gw_port):
+        #    LOG.info("ignoring remove floating ip non-HSRP interface")
+        #    return
+        
+        for asr_ent in self._get_asr_list():
+            vrf_name = self._csr_get_vrf_name(ri)
+            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            
+            out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
+            # First remove NAT from outer interface
+            self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
+            #Clear the NAT translation table
+            self._remove_dyn_nat_translations(asr_ent)
+            #Remove the floating ip
+            self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
+            #Enable NAT on outer interface
+            self._add_interface_nat(out_intfc_name, 'outside', asr_ent)
 
     def _csr_update_routing_table(self, ri, action, route):
         vrf_name = self._csr_get_vrf_name(ri)
