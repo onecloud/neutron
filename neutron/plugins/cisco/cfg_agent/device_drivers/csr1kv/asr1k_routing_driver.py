@@ -232,7 +232,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
         for asr_ent in self._get_asr_list():
             vrf_name = self._csr_get_vrf_name(ri)
-            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            #asr_ent = self._get_asr_ent_from_port(ex_gw_port)
             self._add_floating_ip(floating_ip, fixed_ip, vrf_name, asr_ent, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
@@ -243,7 +243,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
         for asr_ent in self._get_asr_list():
             vrf_name = self._csr_get_vrf_name(ri)
-            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            #asr_ent = self._get_asr_ent_from_port(ex_gw_port)
             
             out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
             # First remove NAT from outer interface
