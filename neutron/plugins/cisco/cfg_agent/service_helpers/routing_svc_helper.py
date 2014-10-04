@@ -64,6 +64,7 @@ class RouterInfo(object):
         self.router = router
         self.routes = []
         self.ha_info = router.get('ha_info')
+        self.ha_gw_ports = []
 
     @property
     def router(self):
@@ -718,12 +719,14 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                 ri.internal_ports.remove(p)
 
             if ex_gw_port and not ri.ex_gw_port:
+                ri.ha_gw_ports += gw_ports
                 gw_ports.append(ex_gw_port)
                 for p in gw_ports:
                     self._set_subnet_info(p)
                     self._external_gateway_added(ri, p)
             elif not ex_gw_port and ri.ex_gw_port:
                 gw_ports.append(ri.ex_gw_port)
+                gw_ports += ri.ha_gw_ports
                 for p in gw_ports:
                     self._external_gateway_removed(ri, p)
 
