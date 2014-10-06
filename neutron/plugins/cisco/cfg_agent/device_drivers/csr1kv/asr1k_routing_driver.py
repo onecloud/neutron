@@ -372,7 +372,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                            outer_intfc_name,
                                                            vrf_name)
             rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_INTFC')
+            try:
+                self._check_response(rpc_obj, 'REMOVE_DYN_SRC_TRL_INTFC')
+            except cfg_exc.CSR1kvConfigException as cse:
+                LOG.error("temporary disable REMOVE_DYN_SRC_TRL_INTFC exception handling: %s" % (cse))
 
         confstr = snippets.REMOVE_ACL % acl_no
         rpc_obj = conn.edit_config(target='running', config=confstr)
