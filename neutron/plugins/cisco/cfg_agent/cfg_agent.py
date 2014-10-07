@@ -259,6 +259,7 @@ class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
         self._agent_registration()
         super(CiscoCfgAgentWithStateReport, self).__init__(host=host,
                                                            conf=conf)
+        self.heartbeat = None
         if report_interval:
             self.heartbeat = loopingcall.FixedIntervalLoopingCall(
                 self._report_state)
@@ -329,7 +330,8 @@ class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
             # This means the server does not support report_state
             LOG.warn(_("Neutron server does not support state report. "
                        "State report for this agent will be disabled."))
-            self.heartbeat.stop()
+            if self.heartbeat is not None:
+                self.heartbeat.stop()
             return
         except Exception:
             LOG.exception(_("Failed sending agent report!"))
