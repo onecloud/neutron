@@ -245,6 +245,7 @@ class CiscoCfgAgent(manager.Manager):
 class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
 
     def __init__(self, host, conf=None):
+        self.heartbeat = None
         self.state_rpc = agent_rpc.PluginReportStateAPI(topics.PLUGIN)
         self.agent_state = {
             'binary': 'neutron-cisco-cfg-agent',
@@ -259,7 +260,6 @@ class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
         self._agent_registration()
         super(CiscoCfgAgentWithStateReport, self).__init__(host=host,
                                                            conf=conf)
-        self.heartbeat = None
         if report_interval:
             self.heartbeat = loopingcall.FixedIntervalLoopingCall(
                 self._report_state)
