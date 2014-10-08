@@ -333,10 +333,14 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
     def _count_ha_routers_on_network(self, context, network_id):
         rport_qry = context.session.query(models_v2.Port)
-        asr_ports = rport_qry.filter_by(device_owner=DEVICE_OWNER_ROUTER_HA_GW,
+        asr_ports = rport_qry.filter_by(device_owner=common_constants.DEVICE_OWNER_ROUTER_GW,
                                         network_id=network_id)
 
-        num_ports = len(asr_ports)
+        #num_ports = len(asr_ports)
+        num_ports = asr_ports.count()
+        LOG.error("VVVVVVVVVV num routers on network: %s, %s" % (network_id, num_ports))
+        for port in asr_ports:
+            LOG.error("port: %s" % (port))
         return num_ports
         
 
@@ -365,6 +369,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                      'mac_address': attributes.ATTR_NOT_SPECIFIED,
                      'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
                      #'device_id': router['id'],
+                     'device_id': network_id,
                      'device_owner': DEVICE_OWNER_ROUTER_HA_GW,
                      'admin_state_up': True,
                      'name': ''}})
@@ -417,7 +422,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                           l3_port_check=False)
 
             # No external gateway assignments left, clear the HSRP interfaces
-            if self._count_ha_routers_on_network(context, network_id) == 0:
+            if self._count_ha_routers_on_network(context, gw_port['network_id']) == 0:
                 self._delete_hsrp_interfaces(context.elevated(), None, subnet,
                                              common_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
@@ -432,6 +437,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                   subnet['cidr'])
 
             # Only create HA ports if we are the first to create VLAN subinterface for this ext network
+            needs_hsrp_create = False
             if self._count_ha_routers_on_network(context, network_id) == 0:
                 needs_hsrp_create = True
 

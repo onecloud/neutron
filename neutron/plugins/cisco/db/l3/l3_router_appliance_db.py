@@ -698,7 +698,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
 
-    def _process_sync_data(self, routers, interfaces, floating_ips, ha_gw_interfaces=[]):
+    def _process_sync_data(self, routers, interfaces, floating_ips, gw_interfaces= [], network_gw_dict={}):
         routers_dict = {}
         for router in routers:
             routers_dict[router['id']] = router
@@ -716,11 +716,13 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 router_interfaces.append(interface)
                 router[l3_constants.INTERFACE_KEY] = router_interfaces
 
-        for interface in ha_gw_interfaces:
+        for interface in gw_interfaces:
+            network_id = interface['network_id']
             router = routers_dict.get(interface['device_id'])
             if router:
                 router_interfaces = router.get(l3_constants.HA_GW_KEY, [])
-                router_interfaces.append(interface)
+                network_interfaces = network_gw_dict[network_id]
+                router_interfaces.append(network_interfaces)
                 router[l3_constants.HA_GW_KEY] = router_interfaces
 
         return routers_dict.values()
@@ -738,10 +740,27 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
-            ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                        l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
-            all_ha_interfaces = ha_interfaces + ha_gw_interfaces
+            gw_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                    l3_constants.DEVICE_OWNER_ROUTER_GW)
+            
+            # Make a dictionary of network_id: [ha_gw_interfaces...] 
+            LOG.error("ASDIOASJO gw_interfaces: %s" % (gw_interfaces))
+            network_gw_dict = {}
+            ha_gw_interfaces = []
+            if len(gw_interfaces) > 0:
+                gw_network_ids = []
+                for gw_intf in gw_interfaces:
+                    gw_network_id = gw_intf['network_id']
+                    gw_network_ids.append(gw_network_id)
+                    network_ha_gw_intfs = self.get_sync_interfaces(context, [gw_network_id],
+                                                                l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                    network_gw_dict[gw_network_id] = network_ha_gw_intfs
+                    LOG.error("AAAAAAAAAAAA nw_id: %s ha_gw_interfaces: %s" % (gw_network_id, 
+                                                                               network_ha_gw_intfs))
+                    ha_gw_interfaces += network_ha_gw_intfs
 
+            # Retrieve physical router port bindings
+            all_ha_interfaces = ha_interfaces + ha_gw_interfaces
             for ha_intf in all_ha_interfaces:
                 port_id = ha_intf['id']
                 phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
@@ -753,7 +772,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
             interfaces += ha_interfaces
 
-        return self._process_sync_data(routers, interfaces, floating_ips, ha_gw_interfaces)
+        return self._process_sync_data(routers, interfaces, floating_ips, gw_interfaces, network_gw_dict)
 
 
     def get_sync_data_ext(self, context, router_ids=None, active=None):
