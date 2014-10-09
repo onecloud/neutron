@@ -248,9 +248,15 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         # Delete HSRP standby interfaces
         port_list = []
         rport_qry = context.session.query(models_v2.Port)
-        asr_ports = rport_qry.filter_by(device_id=router_id,
-                                        device_owner=dev_owner,
-                                        network_id=subnet['network_id'])
+        if router_id is None:
+            asr_ports = rport_qry.filter_by(device_owner=dev_owner,
+                                            network_id=subnet['network_id'])
+        else:
+             asr_ports = rport_qry.filter_by(device_id=router_id,
+                                             device_owner=dev_owner,
+                                             network_id=subnet['network_id'])
+
+
         for asr_port in asr_ports:
             port_list.append(asr_port)
             self._core_plugin.delete_port(context, asr_port['id'],
@@ -323,8 +329,29 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
             with context.session.begin(subtransactions=True):
                 context.session.add(port_binding)
+
+
+    def _count_ha_routers_on_network(self, context, network_id):
+        rport_qry = context.session.query(models_v2.Port)
+        asr_ports = rport_qry.filter_by(device_owner=DEVICE_OWNER_ROUTER_HA_GW,
+                                        network_id=network_id)
+
+        num_ports = len(asr_ports)
+        return num_ports
         
 
+    ''' 
+    Create HSRP standby interfaces for external network.
+    
+    As these are 'global' resources, shared across tenants and routers,
+    they will not have a device_id associated.
+    
+    They will only be created when an external network is assigned to a router 
+    for the first time.
+
+    They will be deleted when an external network is no longer assigned to any
+    virtual router.
+    '''    
     def _create_router_gw_hsrp_interfaces(self, context, router, network_id, main_gw_port):
         # Port has no 'tenant-id', as it is hidden from user
 
@@ -337,7 +364,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                      'network_id': network_id,
                      'mac_address': attributes.ATTR_NOT_SPECIFIED,
                      'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
-                     'device_id': router['id'],
+                     #'device_id': router['id'],
                      'device_owner': DEVICE_OWNER_ROUTER_HA_GW,
                      'admin_state_up': True,
                      'name': ''}})
@@ -389,7 +416,10 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                           gw_port['id'],
                                           l3_port_check=False)
 
-            self._delete_hsrp_interfaces(context.elevated(), router_id, subnet, common_constants.DEVICE_OWNER_ROUTER_HA_GW)
+            # No external gateway assignments left, clear the HSRP interfaces
+            if self._count_ha_routers_on_network(context, network_id) == 0:
+                self._delete_hsrp_interfaces(context.elevated(), None, subnet,
+                                             common_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
 
         if network_id is not None and (gw_port is None or
@@ -401,8 +431,14 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                   network_id, subnet['id'],
                                                   subnet['cidr'])
 
+            # Only create HA ports if we are the first to create VLAN subinterface for this ext network
+            if self._count_ha_routers_on_network(context, network_id) == 0:
+                needs_hsrp_create = True
+
             self._create_router_gw_port(context, router, network_id)
-            self._create_router_gw_hsrp_interfaces(context, router, network_id, router.gw_port)
+            
+            if needs_hsrp_create is True:
+                self._create_router_gw_hsrp_interfaces(context, router, network_id, router.gw_port)
 
 
     def delete_router(self, context, id):
@@ -433,13 +469,27 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             # Delete the gw port after the router has been removed to
             # avoid a constraint violation.
             device_filter = {'device_id': [id],
-                             'device_owner': [common_constants.DEVICE_OWNER_ROUTER_GW,
-                                              common_constants.DEVICE_OWNER_ROUTER_HA_GW]}
+                             'device_owner': [common_constants.DEVICE_OWNER_ROUTER_GW]}
             ports = self._core_plugin.get_ports(context.elevated(),
                                                 filters=device_filter)
             for port in ports:
                 self._core_plugin._delete_port(context.elevated(),
                                                port['id'])
+
+            # if this router had no gw port, we are done
+            if len(ports) > 0:
+
+                # If this router was the last one with a gw port on this network
+                # delete the HSRP gw ports
+                network_id = ports[0]['network_id']
+                if self._count_ha_routers_on_network(context, network_id) == 0:                
+                    device_filter = {'network_id': [id],
+                                     'device_owner': [common_constants.DEVICE_OWNER_ROUTER_HA_GW]}
+                    gw_ha_ports = self._core_plugin.get_ports(context.elevated(),
+                                                              filters=device_filter)
+                    for gw_ha_port in gw_ha_ports:
+                        self._core_plugin._delete_port(context.elevated(),
+                                                       gw_ha_port['id'])
 
         self.l3_rpc_notifier.router_deleted(context, id)
 
