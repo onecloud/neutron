@@ -855,10 +855,14 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             context, c_const.AGENT_TYPE_CFG, host)
         if not agent.admin_state_up:
             return []
+            
+        if router_ids is None:
+            router_ids = []
+            routers = self.get_routers(context)
+            for router in routers:
+                router_ids.append(router['id'])
 
-        if router_ids:
-            return self.get_sync_data_ext(context, router_ids=router_ids,
-                                          active=True)
-        else:
-            return []
-   
+        LOG.info("active sync router_ids: %s" % (router_ids))
+
+        return self.get_sync_data_ext(context, router_ids=router_ids,
+                                      active=True)
