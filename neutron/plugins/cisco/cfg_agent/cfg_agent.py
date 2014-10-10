@@ -337,6 +337,48 @@ class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
             LOG.exception(_("Failed sending agent report!"))
 
 
+
+def trace_calls(current_frame, why, arg):
+    """
+    This function is triggered as a callback when sys.trace is invoked.  For each entered stack frame,
+    caller and callee are logged.
+    :param current_frame: Current stack frame
+    :param why: event reason: 'call', 'line', 'return', 'exception', 'c_call',
+                              'c_return', or 'c_exception'
+    :param arg: None for event reason, 'call'
+    :return:
+    """
+    if why == "call":
+        if (current_frame.f_back != None and
+            current_frame.f_back.f_code != None):
+
+            # Parent frame details
+            p_func = current_frame.f_back.f_code.co_name
+            p_file = current_frame.f_back.f_code.co_filename
+            p_lineinfo = current_frame.f_back.f_lineno
+            p_class = ''
+            p_module = ''
+
+            if current_frame.f_back.f_locals.has_key('self'):
+                p_class = current_frame.f_back.f_locals['self'].__class__.__name__
+                p_module = current_frame.f_back.f_locals['self'].__class__.__module__
+
+            # Current frame details
+            c_func = current_frame.f_code.co_name
+            c_file = current_frame.f_code.co_filename
+            c_lineinfo = current_frame.f_lineno
+            c_class = ''
+            c_module = ''
+
+            if current_frame.f_locals.has_key('self'):
+                c_class = current_frame.f_locals['self'].__class__.__name__
+                c_module = current_frame.f_locals['self'].__class__.__module__
+
+            # Order is Caller -> Callee
+            # if trace_depth < 10:
+            LOG.debug ('%s.%s->%s.%s:%s()' % (p_module, p_class,c_module, c_class, c_func))
+
+
 def main(manager='neutron.plugins.cisco.cfg_agent.'
                  'cfg_agent.CiscoCfgAgentWithStateReport'):
     conf = cfg.CONF
@@ -350,6 +392,10 @@ def main(manager='neutron.plugins.cisco.cfg_agent.'
     conf(project='neutron')
     # config.setup_logging() # ICEHOUSE_BACKPORT
     config.setup_logging(conf)
+
+    # uncomment to enable call-debug tracing for now
+    # sys.settrace(trace_calls)
+
     server = neutron_service.Service.create(
         binary='neutron-cisco-cfg-agent',
         topic=c_constants.CFG_AGENT,
