@@ -46,6 +46,7 @@ LOG = logging.getLogger(__name__)
 
 DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
 DEVICE_OWNER_ROUTER_HA_GW = "network:router_ha_gateway"
+PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
 
 
 # class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback, # ICEHOUSE_BACKPORT
@@ -330,7 +331,9 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             with context.session.begin(subtransactions=True):
                 context.session.add(port_binding)
 
-
+    '''
+    How many routers have a port associated with a particular external network?
+    '''
     def _count_ha_routers_on_network(self, context, network_id):
         rport_qry = context.session.query(models_v2.Port)
         asr_ports = rport_qry.filter_by(device_owner=common_constants.DEVICE_OWNER_ROUTER_GW,
@@ -342,7 +345,30 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         for port in asr_ports:
             LOG.error("port: %s" % (port))
         return num_ports
+    
+    '''
+    Create a router construct used to hold "global" external network 
+    HSRP interfaces of type DEVICE_OWNER_ROUTER_HA_GW
+    '''
+    def _create_physical_global_router(self, context):
         
+        global_router_qry = context.session.query(l3_db.Router)
+        global_router_qry.filter_by(id=PHYSICAL_GLOBAL_ROUTER_ID)
+        if global_router_qry.count() > 0:
+            return
+        
+        with context.session.begin(subtransactions=True):
+            # pre-generate id so it will be available when
+            # configuring external gw port
+            router_db = l3_db.Router(id=PHYSICAL_GLOBAL_ROUTER_ID,
+                                     tenant_id='',
+                                     name=PHYSICAL_GLOBAL_ROUTER_ID,
+                                     admin_state_up=True,
+                                     status="ACTIVE")
+            context.session.add(router_db)
+
+        return
+        #return self._make_router_dict(router_db, process_extensions=False)
 
     ''' 
     Create HSRP standby interfaces for external network.
@@ -369,7 +395,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                      'mac_address': attributes.ATTR_NOT_SPECIFIED,
                      'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
                      #'device_id': router['id'],
-                     'device_id': network_id,
+                     #'device_id': network_id,
+                     'device_id': PHYSICAL_GLOBAL_ROUTER_ID,
                      'device_owner': DEVICE_OWNER_ROUTER_HA_GW,
                      'admin_state_up': True,
                      'name': ''}})
@@ -389,6 +416,9 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
 
     
     def _update_router_gw_info(self, context, router_id, info, router=None):
+
+        self._create_physical_global_router(context)
+
         # TODO(salvatore-orlando): guarantee atomic behavior also across
         # operations that span beyond the model classes handled by this
         # class (e.g.: delete_port)
