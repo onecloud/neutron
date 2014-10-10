@@ -304,6 +304,7 @@ class RoutingServiceHelper(object):
         :return: List of router dicts of format:
                  [ {router_dict1}, {router_dict2},.....]
         """
+        LOG.info("_fetch_router_info, router_ids: %s   all_routers: %s" % (router_ids, all_routers)) 
         try:
             if all_routers:
                 return self.plugin_rpc.get_routers(self.context)
@@ -678,6 +679,18 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
     def __init__(self, host, conf, cfg_agent):
         super(PhysicalRoutingServiceHelper, self).__init__(host, conf, cfg_agent)
         self._use_vm = False
+
+    def _get_port_set_diffs(self, existing_list, current_list):
+        existing_port_ids = set([p['id'] for p in existing_list])
+        current_port_ids = set([p['id'] for p in current_list
+                                if p['admin_state_up']])
+        new_ports = [p for p in current_list
+                     if
+                     p['id'] in (current_port_ids - existing_port_ids)]
+        old_ports = [p for p in existing_list
+                     if p['id'] not in current_port_ids]
+
+        return old_ports, new_ports
     
     def _process_router(self, ri):
         """Process a router, apply latest configuration and update router_info.
@@ -700,14 +713,9 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
             ri.ha_info = ri.router.get('ha_info', None)
             internal_ports = ri.router.get(l3_constants.INTERFACE_KEY, [])
             gw_ports = ri.router.get(l3_constants.HA_GW_KEY, [])
-            existing_port_ids = set([p['id'] for p in ri.internal_ports])
-            current_port_ids = set([p['id'] for p in internal_ports
-                                    if p['admin_state_up']])
-            new_ports = [p for p in internal_ports
-                         if
-                         p['id'] in (current_port_ids - existing_port_ids)]
-            old_ports = [p for p in ri.internal_ports
-                         if p['id'] not in current_port_ids]
+
+            old_ports, new_ports = self._get_port_set_diffs(ri.internal_ports, internal_ports)
+            old_gw_ports, new_gw_ports = self._get_port_set_diffs(ri.ha_gw_ports, gw_ports)
 
             for p in new_ports:
                 self._set_subnet_info(p)
@@ -718,6 +726,16 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                 self._internal_network_removed(ri, p, ri.ex_gw_port)
                 ri.internal_ports.remove(p)
 
+            for p in new_gw_ports:
+                self._set_subnet_info(p)
+                self._external_gateway_added(ri, p)
+                ri.ha_gw_ports.append(p)
+
+            for p in old_gw_ports:
+                self._external_gateway_removed(ri, p)
+                ri.ha_gw_ports.remove(p)
+
+            '''
             if ex_gw_port and not ri.ex_gw_port:
                 ri.ha_gw_ports += gw_ports
                 gw_ports.append(ex_gw_port)
@@ -729,7 +747,7 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                 gw_ports += ri.ha_gw_ports
                 for p in gw_ports:
                     self._external_gateway_removed(ri, p)
-
+            '''
             if ex_gw_port:
                 self._process_router_floating_ips(ri, ex_gw_port)
 

@@ -226,7 +226,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                  'device_owner': dev_owner,
                  'name': ''}})
 
-            LOG.error("ZXCVWSAD added new port %s" % (asr_port))
+            LOG.info("added new port %s" % (asr_port))
             port_list.append(asr_port)
         
         for port in port_list:
@@ -288,7 +288,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                                            interface_info)
 
         
-        LOG.error("ZXCVWSAD finished parent add_router_interface, info:%s" % (info))
+        LOG.info("finished parent add_router_interface, info:%s" % (info))
 
         # If no exception has been raised, we're good to go            
         subnet_id = info['subnet_id']
@@ -305,7 +305,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                                                               router_id,
                                                                               interface_info)
 
-        LOG.error("ZXCVWSAD finished parent remove_router_interface, info:%s" % (info))
+        LOG.info("finished parent remove_router_interface, info:%s" % (info))
 
         # If no exception has been raised, we're good to go            
         subnet_id = info['subnet_id']
@@ -339,33 +339,38 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
         asr_ports = rport_qry.filter_by(device_owner=common_constants.DEVICE_OWNER_ROUTER_GW,
                                         network_id=network_id)
 
-        #num_ports = len(asr_ports)
         num_ports = asr_ports.count()
-        LOG.error("VVVVVVVVVV num routers on network: %s, %s" % (network_id, num_ports))
+        LOG.info("num routers on network: %s, %s" % (network_id, num_ports))
         for port in asr_ports:
-            LOG.error("port: %s" % (port))
+            LOG.info("port: %s" % (port))
         return num_ports
     
+    def _send_physical_global_router_updated_notification(self, context):
+        phy_router = self.get_router(context, PHYSICAL_GLOBAL_ROUTER_ID)
+        if phy_router:
+            self.l3_cfg_rpc_notifier.routers_updated(context,
+                                                     [phy_router])
     '''
     Create a router construct used to hold "global" external network 
     HSRP interfaces of type DEVICE_OWNER_ROUTER_HA_GW
     '''
     def _create_physical_global_router(self, context):
+
+        context = context.elevated()
         
         global_router_qry = context.session.query(l3_db.Router)
-        global_router_qry.filter_by(id=PHYSICAL_GLOBAL_ROUTER_ID)
+        global_router_qry = global_router_qry.filter_by(id=PHYSICAL_GLOBAL_ROUTER_ID)
         if global_router_qry.count() > 0:
             return
         
         with context.session.begin(subtransactions=True):
-            # pre-generate id so it will be available when
-            # configuring external gw port
             router_db = l3_db.Router(id=PHYSICAL_GLOBAL_ROUTER_ID,
                                      tenant_id='',
                                      name=PHYSICAL_GLOBAL_ROUTER_ID,
                                      admin_state_up=True,
                                      status="ACTIVE")
             context.session.add(router_db)
+            self._send_physical_global_router_updated_notification(context)
 
         return
         #return self._make_router_dict(router_db, process_extensions=False)
@@ -455,6 +460,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             if self._count_ha_routers_on_network(context, gw_port['network_id']) == 0:
                 self._delete_hsrp_interfaces(context.elevated(), None, subnet,
                                              common_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                self._send_physical_global_router_updated_notification(context)
 
 
         if network_id is not None and (gw_port is None or
@@ -475,6 +481,7 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
             
             if needs_hsrp_create is True:
                 self._create_router_gw_hsrp_interfaces(context, router, network_id, router.gw_port)
+                self._send_physical_global_router_updated_notification(context)
 
 
     def delete_router(self, context, id):
@@ -526,9 +533,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                     for gw_ha_port in gw_ha_ports:
                         self._core_plugin._delete_port(context.elevated(),
                                                        gw_ha_port['id'])
-
-        self.l3_rpc_notifier.router_deleted(context, id)
-
+                   
+                    self._send_physical_global_router_updated_notification(context)
 
 
 
