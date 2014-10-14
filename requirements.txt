@@ -25,5 +25,5 @@ stevedore>=0.14
 oslo.config>=1.2.0
 oslo.rootwrap
 ciscoconfparse
-
+pygtrie
 python-novaclient>=2.17.0
