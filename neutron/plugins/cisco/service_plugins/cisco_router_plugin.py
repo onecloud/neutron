@@ -536,6 +536,9 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                    
                     self._send_physical_global_router_updated_notification(context)
 
+            self.l3_cfg_rpc_notifier.router_deleted(context, router)
+
+
 
 
     @property
