@@ -19,6 +19,7 @@ eventlet.monkey_patch()
 import pprint
 import sys
 import time
+import trie
 
 from oslo.config import cfg
 
@@ -50,6 +51,9 @@ LOG = logging.getLogger(__name__)
 REGISTRATION_RETRY_DELAY = 2
 MAX_REGISTRATION_ATTEMPTS = 30
 
+
+
+        
 
 class CiscoDeviceManagementApi(proxy.RpcProxy): # ICEHOUSE_BACKPORT
     """Agent side of the device manager RPC API."""
@@ -337,6 +341,75 @@ class CiscoCfgAgentWithStateReport(CiscoCfgAgent):
             LOG.exception(_("Failed sending agent report!"))
 
 
+class CallTraceManager:
+    """
+    This class assists in managing the call-trace debug output
+    Reference sys.settrace
+    """
+
+    # a dictionary that maps package_name (key) to a boolean
+    # if true, call_trace is enabled else don't trace
+    packages = trie.Trie()
+     
+    trace_all = False
+
+def trace_calls(current_frame, why, arg):
+    """
+    This function is triggered as a callback when sys.trace is invoked.  For each entered stack frame,
+    caller and callee are logged.
+    :param current_frame: Current stack frame
+    :param why: event reason: 'call', 'line', 'return', 'exception', 'c_call',
+                'c_return', or 'c_exception'
+    :param arg: None for event reason, 'call'
+    :return:
+    """
+
+    if why == "call":
+
+        # increment call trace depth
+        # CallTraceManager.current_trace_depth = CallTraceManager.current_trace_depth + 1
+        # print ("trace depth = ", CallTraceManager.current_trace_depth)
+
+        if (current_frame.f_back != None and
+            current_frame.f_back.f_code != None):
+
+            # Parent frame details
+            p_func = current_frame.f_back.f_code.co_name
+            p_file = current_frame.f_back.f_code.co_filename
+            p_lineinfo = current_frame.f_back.f_lineno
+            p_class = ''
+            p_module = ''
+
+            if current_frame.f_back.f_locals.has_key('self'):
+                p_class = current_frame.f_back.f_locals['self'].__class__.__name__
+                p_module = current_frame.f_back.f_locals['self'].__class__.__module__
+
+            # Current frame details
+            c_func = current_frame.f_code.co_name
+            c_file = current_frame.f_code.co_filename
+            c_lineinfo = current_frame.f_lineno
+            c_class = ''
+            c_module = ''
+
+            if current_frame.f_locals.has_key('self'):
+                c_class = current_frame.f_locals['self'].__class__.__name__
+                c_module = current_frame.f_locals['self'].__class__.__module__
+
+            # print ("c_module = %s" % (c_module))    
+            
+            match = CallTraceManager.packages.FindLongestPrefix(c_module) 
+            # print ("match = ", match)
+            if ((CallTraceManager.trace_all == True or
+                (match.key != None and 
+                 match.value == True))):
+                
+                 # Order is Caller -> Callee
+                 LOG.debug ('%s.%s->%s.%s:%s()' % (p_module, p_class,c_module, c_class, c_func))
+    elif why == "return":
+        # CallTraceManager.current_trace_depth = CallTraceManager.current_trace_depth - 1
+        pass
+
+
 def main(manager='neutron.plugins.cisco.cfg_agent.'
                  'cfg_agent.CiscoCfgAgentWithStateReport'):
     conf = cfg.CONF
@@ -350,6 +423,14 @@ def main(manager='neutron.plugins.cisco.cfg_agent.'
     conf(project='neutron')
     # config.setup_logging() # ICEHOUSE_BACKPORT
     config.setup_logging(conf)
+
+    # uncomment to enable call-debug tracing for now
+    # CallTraceManager.trace_all = False
+    # longest prefix match based filtering ... neutron.plugins.cisco.cfg_agent will match
+    # to key = neutron.plugins.cisco, value = True and thus be call-traced
+    # CallTraceManager.packages["neutron.plugins.cisco"] = True
+    # sys.settrace(trace_calls)
+
     server = neutron_service.Service.create(
         binary='neutron-cisco-cfg-agent',
         topic=c_constants.CFG_AGENT,
