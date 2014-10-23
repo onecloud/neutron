@@ -46,11 +46,13 @@ class DeviceDriverManager(object):
 
     def __init__(self):
         self._drivers = {}
+        self._global_driver = None
         self._hosting_device_routing_drivers_binding = {}
 
     def get_driver(self, resource_id):
         try:
-            return self._drivers[resource_id]
+            return self._global_driver
+            # return self._drivers[resource_id]
         except KeyError:
             with excutils.save_and_reraise_exception(reraise=False):
                 raise cfg_exceptions.DriverNotFound(id=resource_id)
@@ -82,14 +84,18 @@ class DeviceDriverManager(object):
             else:
                 # ICEHOUSE_BACKPORT
                 # revisit this, don't recreate driver every time this is called?
-                if resource_id in self._drivers:
-                    driver = self._drivers[resource_id]
+                
+                # if resource_id in self._drivers:
+                #    driver = self._drivers[resource_id]
+                if self._global_driver is not None:
+                    return self._global_driver
                 else:
                     hosting_device = resource['hosting_device']
                     driver_class = resource['router_type']['cfg_agent_driver']
                     driver = importutils.import_object(driver_class,
                                                        **hosting_device)
-                    self._drivers[resource_id] = driver
+                    #self._drivers[resource_id] = driver
+                    self._global_driver = driver
                                     
             return driver
         except ImportError:
