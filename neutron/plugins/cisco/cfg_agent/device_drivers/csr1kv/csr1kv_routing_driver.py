@@ -47,7 +47,6 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     """
 
     DEV_NAME_LEN = 14
-    _use_vm = False
 
     def __init__(self, **device_params):
         try:

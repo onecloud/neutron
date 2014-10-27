@@ -127,7 +127,6 @@ class RoutingServiceHelper(object):
         return n_rpc.PluginRpcDispatcher([self])
 
     def __init__(self, host, conf, cfg_agent):
-        self._use_vm = True
         self.conf = conf
         self.cfg_agent = cfg_agent
         self.context = n_context.get_admin_context_without_session()
@@ -229,29 +228,23 @@ class RoutingServiceHelper(object):
             if removed_routers:
                 resources['removed_routers'] = removed_routers
 
-            if self._use_vm is True:
-                hosting_devices = self._sort_resources_per_hosting_device(
-                    resources)
+            hosting_devices = self._sort_resources_per_hosting_device(
+                resources)
 
             # Dispatch process_services() for each hosting device
             pool = eventlet.GreenPool()
 
-            if self._use_vm is True:
-                for device_id, resources in hosting_devices.items():
-                    routers = resources.get('routers')
-                    removed_routers = resources.get('removed_routers')
-                    pool.spawn_n(self._process_routers, routers, removed_routers,
-                                 device_id, all_routers=all_routers_flag)
-                    pool.waitall()
-                    if removed_devices_info:
-                        for hd_id in removed_devices_info['hosting_data']:
-                            self._drivermgr.remove_driver_for_hosting_device(hd_id)
-                            LOG.debug("Routing service processing successfully completed")
-            else:
+            for device_id, resources in hosting_devices.items():
+                routers = resources.get('routers')
+                removed_routers = resources.get('removed_routers')
                 pool.spawn_n(self._process_routers, routers, removed_routers,
-                             0, all_routers=all_routers_flag)
+                             device_id, all_routers=all_routers_flag)
                 pool.waitall()
-                
+                if removed_devices_info:
+                    for hd_id in removed_devices_info['hosting_data']:
+                        self._drivermgr.remove_driver_for_hosting_device(hd_id)
+                        LOG.debug("Routing service processing successfully completed")
+
         except Exception:
             LOG.exception(_("Failed processing routers"))
             self.fullsync = True
@@ -402,12 +395,11 @@ class RoutingServiceHelper(object):
                         continue
                     cur_router_ids.add(r['id'])
 
-                    if self._use_vm is True:
-                        hd = r['hosting_device']
-                        if not self._dev_status.is_hosting_device_reachable(hd):
-                            LOG.info(_("Router: %(id)s is on an unreachable "
-                                       "hosting device. "), {'id': r['id']})
-                            continue
+                    hd = r['hosting_device']
+                    if not self._dev_status.is_hosting_device_reachable(hd):
+                        LOG.info(_("Router: %(id)s is on an unreachable "
+                                   "hosting device. "), {'id': r['id']})
+                        continue
 
                     if r['id'] not in self.router_info:
                         self._router_added(r['id'], r)
@@ -678,7 +670,130 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
 
     def __init__(self, host, conf, cfg_agent):
         super(PhysicalRoutingServiceHelper, self).__init__(host, conf, cfg_agent)
-        self._use_vm = False
+        self._drivermgr = driver_mgr.PhysicalDeviceDriverManager()
+
+    def process_service(self, device_ids=None, removed_devices_info=None):
+        try:
+            LOG.debug("Routing service processing started")
+            resources = {}
+            routers = []
+            removed_routers = []
+            all_routers_flag = False
+            if self.fullsync:
+                LOG.debug("FullSync flag is on. Starting fullsync")
+                # Setting all_routers_flag and clear the global full_sync flag
+                all_routers_flag = True
+                self.fullsync = False
+                self.updated_routers.clear()
+                self.removed_routers.clear()
+                self.sync_devices.clear()
+                routers = self._fetch_router_info(all_routers=True)
+            else:
+                if self.updated_routers:
+                    router_ids = list(self.updated_routers)
+                    LOG.debug("Updated routers:%s", router_ids)
+                    self.updated_routers.clear()
+                    routers = self._fetch_router_info(router_ids=router_ids)
+                if device_ids:
+                    LOG.debug("Adding new devices:%s", device_ids)
+                    self.sync_devices = set(device_ids) | self.sync_devices
+                if self.sync_devices:
+                    sync_devices_list = list(self.sync_devices)
+                    LOG.debug("Fetching routers on:%s", sync_devices_list)
+                    routers.extend(self._fetch_router_info(
+                        device_ids=sync_devices_list))
+                    self.sync_devices.clear()
+                if removed_devices_info:
+                    if removed_devices_info.get('deconfigure'):
+                        ids = self._get_router_ids_from_removed_devices_info(
+                            removed_devices_info)
+                        self.removed_routers = self.removed_routers | set(ids)
+                if self.removed_routers:
+                    removed_routers_ids = list(self.removed_routers)
+                    LOG.debug("Removed routers:%s", removed_routers_ids)
+                    for r in removed_routers_ids:
+                        if r in self.router_info:
+                            removed_routers.append(self.router_info[r].router)
+
+            # Sort on hosting device
+            if routers:
+                resources['routers'] = routers
+            if removed_routers:
+                resources['removed_routers'] = removed_routers
+
+            # Dispatch process_services() for each hosting device
+            pool = eventlet.GreenPool()
+            pool.spawn_n(self._process_routers, routers, removed_routers,
+                         0, all_routers=all_routers_flag)
+            pool.waitall()
+                
+        except Exception:
+            LOG.exception(_("Failed processing routers"))
+            self.fullsync = True
+
+
+    def _process_routers(self, routers, removed_routers,
+                         device_id=None, all_routers=False):
+        """Process the set of routers.
+
+        Iterating on the set of routers received and comparing it with the
+        set of routers already in the routing service helper, new routers
+        which are added are identified. Before processing check the
+        reachability (via ping) of hosting device where the router is hosted.
+        If device is not reachable it is backlogged.
+
+        For routers which are only updated, call `_process_router()` on them.
+
+        When all_routers is set to True (because of a full sync),
+        this will result in the detection and deletion of routers which
+        have been removed.
+
+        Whether the router can only be assigned to a particular hosting device
+        is decided and enforced by the plugin. No checks are done here.
+
+        :param routers: The set of routers to be processed
+        :param removed_routers: the set of routers which where removed
+        :param device_id: Id of the hosting device
+        :param all_routers: Flag for specifying a partial list of routers
+        :return: None
+        """
+        try:
+            if all_routers:
+                prev_router_ids = set(self.router_info)
+            else:
+                prev_router_ids = set(self.router_info) & set(
+                    [router['id'] for router in routers])
+            cur_router_ids = set()
+            for r in routers:
+                try:
+                    if not r['admin_state_up']:
+                        continue
+                    cur_router_ids.add(r['id'])
+
+                    if r['id'] not in self.router_info:
+                        self._router_added(r['id'], r)
+                    ri = self.router_info[r['id']]
+                    ri.router = r
+                    self._process_router(ri)
+                except KeyError as e:
+                    LOG.exception(_("Key Error, missing key: %s"), e)
+                    self.updated_routers.add(r['id'])
+                    continue
+                except cfg_exceptions.DriverException as e:
+                    LOG.exception(_("Driver Exception on router:%(id)s. "
+                                    "Error is %(e)s"), {'id': r['id'], 'e': e})
+                    self.updated_routers.update(r['id'])
+                    continue
+            # identify and remove routers that no longer exist
+            for router_id in prev_router_ids - cur_router_ids:
+                self._router_removed(router_id)
+            if removed_routers:
+                for router in removed_routers:
+                    self._router_removed(router['id'])
+        except Exception:
+            LOG.exception(_("Exception in processing routers on device:%s"),
+                          device_id)
+            self.sync_devices.add(device_id)
 
     def _get_port_set_diffs(self, existing_list, current_list):
         existing_port_ids = set([p['id'] for p in existing_list])

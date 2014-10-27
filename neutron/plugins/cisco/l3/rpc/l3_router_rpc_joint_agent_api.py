@@ -26,7 +26,6 @@ LOG = logging.getLogger(__name__)
 class L3RouterJointAgentNotifyAPI(proxy.RpcProxy):
     """API for plugin to notify Cisco cfg agent."""
     BASE_RPC_API_VERSION = '1.0'
-    _use_vm = False
 
     def __init__(self, l3plugin, topic=c_constants.CFG_AGENT_L3_ROUTING):
         super(L3RouterJointAgentNotifyAPI, self).__init__(
@@ -47,16 +46,11 @@ class L3RouterJointAgentNotifyAPI(proxy.RpcProxy):
         """Notify individual Cisco cfg agents."""
         admin_context = context.is_admin and context or context.elevated()
         for router in routers:
-            if self._use_vm is True:
-                if router['hosting_device'] is None:
-                    continue
-                agents = self._l3plugin.get_cfg_agents_for_hosting_devices(
-                    admin_context, [router['hosting_device']['id']],
-                    admin_state_up=True, active=True, schedule=True)
-            else:
-                agents = self._l3plugin._get_cfg_agents(admin_context, active=True)
-                # ICEHOUSE_BACKPORT
-                # Revisit this, how do we map cfg_agents to ASR?
+            if router['hosting_device'] is None:
+                continue
+            agents = self._l3plugin.get_cfg_agents_for_hosting_devices(
+                admin_context, [router['hosting_device']['id']],
+                admin_state_up=True, active=True, schedule=True)
 
             for agent in agents:
                 LOG.debug('Notify %(agent_type)s at %(topic)s.%(host)s the '
@@ -109,3 +103,29 @@ class L3RouterJointAgentNotifyAPI(proxy.RpcProxy):
                                     {'hosting_data': hosting_data,
                                      'deconfigure': deconfigure}, host,
                                     topic=c_constants.CFG_AGENT)
+
+
+
+
+class PhysicalL3RouterJointAgentNotifyAPI(proxy.RpcProxy):
+    """API for plugin to notify Cisco cfg agent."""
+    BASE_RPC_API_VERSION = '1.0'
+
+    def _agent_notification(self, context, method, routers, operation, data):
+        """Notify individual Cisco cfg agents."""
+        admin_context = context.is_admin and context or context.elevated()
+        for router in routers:
+
+            agents = self._l3plugin._get_cfg_agents(admin_context, active=True)
+
+            for agent in agents:
+                LOG.debug('Notify %(agent_type)s at %(topic)s.%(host)s the '
+                          'message %(method)s',
+                          {'agent_type': agent.agent_type,
+                           'topic': c_constants.CFG_AGENT_L3_ROUTING,
+                           'host': agent.host,
+                           'method': method})
+                self.cast(context,
+                          self.make_msg(method, routers=[router['id']]),
+                          topic='%s.%s' % (c_constants.CFG_AGENT_L3_ROUTING,
+                                           agent.host))

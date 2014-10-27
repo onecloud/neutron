@@ -75,7 +75,6 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
     _backlogged_routers = {}
     _refresh_router_backlog = True
     _heartbeat = None
-    _use_vm = False
 
     @property
     def l3_cfg_rpc_notifier(self):
@@ -655,6 +654,13 @@ class CiscoPhyRouterPortBinding(model_base.BASEV2):
 
 
 class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
+
+    @property
+    def l3_cfg_rpc_notifier(self):
+        if not hasattr(self, '_l3_cfg_rpc_notifier'):
+            self._l3_cfg_rpc_notifier = (l3_router_rpc_joint_agent_api.
+                                         PhysicalL3RouterJointAgentNotifyAPI(self))
+        return self._l3_cfg_rpc_notifier
     
     def create_router(self, context, router):
         with context.session.begin(subtransactions=True):

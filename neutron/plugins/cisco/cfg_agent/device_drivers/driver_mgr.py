@@ -42,17 +42,13 @@ class DeviceDriverManager(object):
     This class is used by the service helper classes.
     """
 
-    _use_vm = False
-
     def __init__(self):
         self._drivers = {}
-        self._global_driver = None
         self._hosting_device_routing_drivers_binding = {}
 
     def get_driver(self, resource_id):
         try:
-            return self._global_driver
-            # return self._drivers[resource_id]
+            return self._drivers[resource_id]
         except KeyError:
             with excutils.save_and_reraise_exception(reraise=False):
                 raise cfg_exceptions.DriverNotFound(id=resource_id)
@@ -69,33 +65,18 @@ class DeviceDriverManager(object):
         """
         try:
             resource_id = resource['id']
-            if self._use_vm is True:
-                hosting_device = resource['hosting_device']
-                hd_id = hosting_device['id']
-                if hd_id in self._hosting_device_routing_drivers_binding:
-                    driver = self._hosting_device_routing_drivers_binding[hd_id]
-                    self._drivers[resource_id] = driver
-                else:
-                    driver_class = resource['router_type']['cfg_agent_driver']
-                    driver = importutils.import_object(driver_class,
-                                                       **hosting_device)
-                    self._hosting_device_routing_drivers_binding[hd_id] = driver
-                    self._drivers[resource_id] = driver
+            hosting_device = resource['hosting_device']
+            hd_id = hosting_device['id']
+            if hd_id in self._hosting_device_routing_drivers_binding:
+                driver = self._hosting_device_routing_drivers_binding[hd_id]
+                self._drivers[resource_id] = driver
             else:
-                # ICEHOUSE_BACKPORT
-                # revisit this, don't recreate driver every time this is called?
-                
-                # if resource_id in self._drivers:
-                #    driver = self._drivers[resource_id]
-                if self._global_driver is not None:
-                    return self._global_driver
-                else:
-                    hosting_device = resource['hosting_device']
-                    driver_class = resource['router_type']['cfg_agent_driver']
-                    driver = importutils.import_object(driver_class,
-                                                       **hosting_device)
-                    #self._drivers[resource_id] = driver
-                    self._global_driver = driver
+                driver_class = resource['router_type']['cfg_agent_driver']
+                driver = importutils.import_object(driver_class,
+                                                   **hosting_device)
+                self._hosting_device_routing_drivers_binding[hd_id] = driver
+                self._drivers[resource_id] = driver
+           
                                     
             return driver
         except ImportError:
@@ -118,3 +99,48 @@ class DeviceDriverManager(object):
         """Remove driver associated to a particular hosting device."""
         if hd_id in self._hosting_device_routing_drivers_binding:
             del self._hosting_device_routing_drivers_binding[hd_id]
+
+
+
+class PhysicalDeviceDriverManager(DeviceDriverManager):
+
+    def __init__(self):
+        self._drivers = {}
+        self._global_driver = None
+
+    def get_driver(self, resource_id):
+        try:
+            return self._global_driver
+        except KeyError:
+            with excutils.save_and_reraise_exception(reraise=False):
+                raise cfg_exceptions.DriverNotFound(id=resource_id)
+
+    def set_driver(self, resource):
+        """Set the driver for a neutron resource.
+
+        :param resource: Neutron resource in dict format. Expected keys:
+                        { 'id': <value>
+                          'hosting_device': { 'id': <value>, }
+                          'router_type': {'cfg_agent_driver': <value>,  }
+                        }
+        :return driver : driver object
+        """
+        try:
+            # ICEHOUSE_BACKPORT
+            if self._global_driver is not None:
+                return self._global_driver
+            else:
+                hosting_device = resource['hosting_device']
+                driver_class = resource['router_type']['cfg_agent_driver']
+                driver = importutils.import_object(driver_class,
+                                                   **hosting_device)
+                self._global_driver = driver
+                                    
+            return driver
+        except ImportError:
+            LOG.exception(_("Error loading cfg agent driver."))
+            with excutils.save_and_reraise_exception(reraise=False):
+                raise cfg_exceptions.DriverNotExist(driver=driver_class)
+        except KeyError as e:
+            with excutils.save_and_reraise_exception(reraise=False):
+                raise cfg_exceptions.DriverNotSetForMissingParameter(e)
