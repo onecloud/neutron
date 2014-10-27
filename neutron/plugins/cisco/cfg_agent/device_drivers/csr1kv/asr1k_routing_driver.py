@@ -87,7 +87,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._asr_config = ASR1kConfigInfo()
         self._csr_conn = None
         self._intfs_enabled = False
-        self.ignore_cfg_check = True
+        self._ignore_cfg_check = False
         self.hsrp_group_base = 200
         self.hsrp_real_ip_base = 200
         return
@@ -106,6 +106,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
 
     ###### Public Functions ########
+
+    def set_ignore_cfg_check(self, is_set):
+        self._ignore_cfg_check = is_set
 
     def internal_network_added(self, ri, port):
         gw_ip = port['subnet']['gateway_ip']
@@ -315,7 +318,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _remove_subinterface(self, subinterface, asr_ent):
         #Optional : verify this is the correct subinterface
-        if self._interface_exists(subinterface, asr_ent) or self.ignore_cfg_check:
+        if self._ignore_cfg_check or self._interface_exists(subinterface, asr_ent):
             confstr = snippets.REMOVE_SUBINTERFACE % subinterface
             self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE', asr_ent)
 
@@ -367,7 +370,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name, asr_ent):
         conn = self._get_connection(asr_ent)
         confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
-        if self._cfg_exists(confstr, asr_ent) or self.ignore_cfg_check:
+        if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
             confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
                                                            outer_intfc_name,
                                                            vrf_name)
@@ -432,7 +435,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_default_static_route(self, gw_ip, vrf, asr_ent):
         conn = self._get_connection(asr_ent)
         confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
-        if self._cfg_exists(confstr, asr_ent) or self.ignore_cfg_check:
+        if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
             confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
@@ -471,7 +474,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.exception(_("Failed creating VRF %s"), vrf_name)
 
     def _remove_vrf(self, vrf_name, asr_ent):
-        if vrf_name in self._get_vrfs(asr_ent) or self.ignore_cfg_check:
+        if self._ignore_cfg_check or vrf_name in self._get_vrfs(asr_ent):
             conn = self._get_connection(asr_ent)
             confstr = snippets.REMOVE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
