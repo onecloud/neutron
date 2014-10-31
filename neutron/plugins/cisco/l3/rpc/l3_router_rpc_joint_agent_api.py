@@ -107,7 +107,7 @@ class L3RouterJointAgentNotifyAPI(proxy.RpcProxy):
 
 
 
-class PhysicalL3RouterJointAgentNotifyAPI(proxy.RpcProxy):
+class PhysicalL3RouterJointAgentNotifyAPI(L3RouterJointAgentNotifyAPI):
     """API for plugin to notify Cisco cfg agent."""
     BASE_RPC_API_VERSION = '1.0'
 
