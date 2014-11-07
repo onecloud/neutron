@@ -60,11 +60,74 @@ class ConfigSyncTester(manager.Manager):
         self.context = n_context.get_admin_context_without_session()
         
         self.plugin_rpc.register(self.context)
-        self.start_test_loop(self.test_get_routers, 10)
+        self.start_test_loop(self.test_get_routers, 60)
 
     def register(self):
         self.plugin_rpc.register(self.context)
-        
+
+    def start_test_loop(self, loop_fn, loop_interval):
+        self.loop = loopingcall.FixedIntervalLoopingCall(loop_fn)
+        self.loop.start(interval=loop_interval)
+
+    def testloop1(self):
+        print("Hello")
+
+    def get_all_routers(self):
+        return self.plugin_rpc.get_routers(self.context)
+
+    def process_routers_data(self, routers):
+        router_id_dict = {}
+        interface_segment_dict = {}
+        for router in routers:
+            
+            # initialize router dict keyed by first 6 characters of router_id
+            router_id = router['id'][0:6]
+            router_id_dict[router_id] = router
+            
+
+            # initialize interface dict keyed by segment_id 
+            interfaces = []
+            if '_interfaces' in router.keys():
+                interfaces += router['_interfaces']
+
+            if 'gw_port' in router.keys():
+                interfaces += [router['gw_port']]
+
+            if '_ha_gw_interfaces' in router.keys():
+                interfaces += router['_ha_gw_interfaces']
+
+            for interface in interfaces:
+                hosting_info = interface['hosting_info']
+                segment_id = hosting_info['segmentation_id']
+                if segment_id not in interface_segment_dict:
+                    interface_segment_dict[segment_id] = []
+                interface_segment_dict[segment_id].append(interface)
+
+        return router_id_dict, interface_segment_dict
+
+    def test_get_routers(self):
+        routers = self.get_all_routers()
+        router_id_dict, intf_segment_dict = self.process_routers_data(routers)
+
+        for router_id, router in router_id_dict.iteritems():
+            #print("ROUTER ID: %s   DATA: %s\n\n" % (router_id, router))
+            print("ROUTER_ID: %s" % (router_id))
+
+        print("\n")
+
+        for segment_id, intf_list in intf_segment_dict.iteritems():
+            print("SEGMENT_ID: %s" % (segment_id))
+            for intf in intf_list:
+                dev_owner = intf['device_owner']
+                dev_id = intf['device_id'][0:6]
+                ip_addr = intf['fixed_ips'][0]['ip_address']
+                if 'phy_router_db' in intf.keys():
+                    phy_router_name = intf['phy_router_db']['name']
+                    print("    INTF: %s, %s, %s, %s" % (ip_addr, dev_id, dev_owner, phy_router_name))
+                else:
+                    print("    INTF: %s, %s, %s" % (ip_addr, dev_id, dev_owner))
+
+            
     def connect(self):
         asr_conn = nc_manager.connect(host="10.1.10.252",
                                       port=22,
@@ -90,20 +153,8 @@ class ConfigSyncTester(manager.Manager):
             ioscfg = rgx.split(running_config.text)
             return ioscfg
 
-    def get_all_routers(self):
-        return self.plugin_rpc.get_routers(self.context)
 
-
-    def start_test_loop(self, loop_fn, loop_interval):
-        self.loop = loopingcall.FixedIntervalLoopingCall(loop_fn)
-        self.loop.start(interval=loop_interval)
-
-    def testloop1(self):
-        print("Hello")
-
-    def test_get_routers(self):
-        routers = self.get_all_routers()
-        print("routers: %s" % (routers))
+        
 
 
 VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
@@ -135,11 +186,12 @@ def showrun_test_main():
     config.register_root_helper(conf)
     common_config.parse(sys.argv[1:])
     conf(project='neutron')
+    config.setup_logging(conf)
 
     print("ciscoconfparse test")
 
     server = StandaloneService.create(
-        binary='showrun_test.py',
+        binary='cfgsync_tester.py',
         topic=c_constants.CFG_AGENT,
         report_interval=10,
         manager=ConfigSyncTester()
