@@ -17,6 +17,12 @@ from neutron.openstack.common import service
 from neutron import service as neutron_service
 from neutron.openstack.common import loopingcall
 
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
+    cisco_csr1kv_snippets as snippets)
+
+VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
+
+
 
 class CiscoRoutingPluginApi(proxy.RpcProxy):
     """RoutingServiceHelper(Agent) side of the  routing RPC API."""
@@ -109,6 +115,8 @@ class ConfigSyncTester(manager.Manager):
         routers = self.get_all_routers()
         router_id_dict, intf_segment_dict = self.process_routers_data(routers)
 
+        print("*************************")
+
         for router_id, router in router_id_dict.iteritems():
             #print("ROUTER ID: %s   DATA: %s\n\n" % (router_id, router))
             print("ROUTER_ID: %s" % (router_id))
@@ -126,6 +134,10 @@ class ConfigSyncTester(manager.Manager):
                     print("    INTF: %s, %s, %s, %s" % (ip_addr, dev_id, dev_owner, phy_router_name))
                 else:
                     print("    INTF: %s, %s, %s" % (ip_addr, dev_id, dev_owner))
+
+        conn = self.connect()
+        self.sync_vrfs(conn, router_id_dict)
+
 
             
     def connect(self):
@@ -153,11 +165,51 @@ class ConfigSyncTester(manager.Manager):
             ioscfg = rgx.split(running_config.text)
             return ioscfg
 
+    def get_ostk_router_ids(self, router_id_dict):
+        ostk_router_ids = []
+        for router_id, router in router_id_dict.iteritems():
+            ostk_router_ids.append(router_id)
+        return ostk_router_ids
 
+    def get_running_config_router_ids(self, parsed_cfg):
+        rconf_ids = []
+
+        for parsed_obj in parsed_cfg.find_objects(VRF_REGEX):
+            print("VRF object: %s" % (parsed_obj))
+            router_id = parsed_obj.re_match(VRF_REGEX)
+            print("    First 6 digits of router ID: %s\n" % (router_id))
+            rconf_ids.append(router_id)
+
+        return rconf_ids;
+    
+
+    def sync_vrfs(self, conn, router_id_dict):
+        running_cfg = self.get_running_config(conn)
+        parsed_cfg = ciscoconfparse.CiscoConfParse(running_cfg)
         
+        ostk_router_ids = self.get_ostk_router_ids(router_id_dict)
+        rconf_ids = self.get_running_config_router_ids(parsed_cfg)
+        
+        source_set = set(ostk_router_ids)
+        dest_set = set(rconf_ids)
+        
+        add_set = source_set.difference(dest_set)
+        del_set = dest_set.difference(source_set)
+        
+        print("VRF DB set: %s" % (source_set))
+        print("VRFs to delete: %s" % (del_set))
+        print("VRFs to add: %s" % (add_set))
+        
+        for router_id in del_set:
+            vrf_name = "nrouter-%s" % (router_id)
+            confstr = snippets.REMOVE_VRF % vrf_name
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            
+        for router_id in add_set:
+            vrf_name = "nrouter-%s" % (router_id)
+            confstr = snippets.CREATE_VRF % vrf_name
+            rpc_obj = conn.edit_config(target='running', config=confstr)
 
-
-VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
 
 
 class StandaloneService(neutron_service.Service):
@@ -199,25 +251,6 @@ def showrun_test_main():
 
     service.launch(server).wait()
 
-
-
-
-    return
-
-    cfg_tester = ConfigSyncTester()
-    conn = cfg_tester.connect()
-
-    routers = cfg_tester.get_all_routers()
-    print("routers: %s" % (routers))
-    
-    running_cfg = cfg_tester.get_running_config(conn)
-    print("show run:\n%s" % (running_cfg))
-    
-    parsed_cfg = ciscoconfparse.CiscoConfParse(running_cfg)
-    for parsed_obj in parsed_cfg.find_objects(VRF_REGEX):
-        print("VRF object: %s" % (parsed_obj))
-        router_id = parsed_obj.re_match(VRF_REGEX)
-        print("    First 6 digits of router ID: %s\n" % (router_id))
 
 
 if __name__ == "__main__":
