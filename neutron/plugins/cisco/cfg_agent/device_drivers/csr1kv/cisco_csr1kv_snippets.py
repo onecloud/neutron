@@ -97,6 +97,7 @@ CREATE_SUBINTERFACE = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
+            <cmd>description OPENSTACK_NEUTRON_INTF<cmd>
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>ip vrf forwarding %s</cmd>
             <cmd>ip address %s %s</cmd>
@@ -115,6 +116,7 @@ CREATE_SUBINTERFACE_EXTERNAL = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
+            <cmd>description OPENSTACK_NEUTRON_INTF<cmd>
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>ip address %s %s</cmd>
         </cli-config-data>
