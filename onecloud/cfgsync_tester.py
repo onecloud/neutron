@@ -22,6 +22,7 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 
 VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
+VRF_EXT_INTF_REGEX = "ip vrf forwarding .*"
 VRF_INTF_REGEX = "ip vrf forwarding nrouter-(\w{6,6})"
 INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
 DOT1Q_REGEX = "encapsulation dot1Q (\d+)"
@@ -92,6 +93,9 @@ class ConfigSyncTester(manager.Manager):
         router_id_dict = {}
         interface_segment_dict = {}
         segment_nat_dict = {}
+        #TODO: could combine segment_nat_dict and interface_segment_dict
+        #      into a single "segment_dict"
+
         for router in routers:
             
             # initialize router dict keyed by first 6 characters of router_id
@@ -132,7 +136,8 @@ class ConfigSyncTester(manager.Manager):
                             intf_segment_id = intf['hosting_info']['segmentation_id']
                             segment_nat_dict[gw_segment_id] = True
                             segment_nat_dict[intf_segment_id] = True
-                        
+
+            
         return router_id_dict, interface_segment_dict, segment_nat_dict
 
     def test_get_routers(self):
@@ -236,6 +241,11 @@ class ConfigSyncTester(manager.Manager):
             confstr = snippets.CREATE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
+    def get_single_cfg(self, cfg_line):
+        if len(cfg_line) != 1:
+            return None
+        else:
+            return cfg_line[0]
 
     def sync_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         
@@ -246,7 +256,7 @@ class ConfigSyncTester(manager.Manager):
         pending_delete_list = []
 
         for intf in runcfg_intfs:
-            print("Openstack interface: %s" % (intf))
+            print("\nOpenstack interface: %s" % (intf))
             intf.intf_num = int(intf.re_match(INTF_REGEX, group=1))
             intf.segment_id = int(intf.re_match(INTF_REGEX, group=2))
             print("  num: %s  segment_id: %s" % (intf.intf_num, intf.segment_id))
@@ -262,10 +272,7 @@ class ConfigSyncTester(manager.Manager):
 
             # Check if dot1q config is correct
             dot1q_cfg = intf.re_search_children(DOT1Q_REGEX)
-            if len(dot1q_cfg) != 1:
-                dot1q_cfg = None
-            else:
-                dot1q_cfg = dot1q_cfg[0]
+            dot1q_cfg = self.get_single_cfg(dot1q_cfg)
 
             if dot1q_cfg is None:
                 print("Missing DOT1Q config, delete interface")
@@ -285,20 +292,20 @@ class ConfigSyncTester(manager.Manager):
                                 intf_type == constants.DEVICE_OWNER_ROUTER_GW)
             
             # Check VRF config
-            vrf_cfg = intf.re_search_children(VRF_INTF_REGEX)
-            if len(vrf_cfg) != 1:
-                vrf_cfg = None
-            else:
-                vrf_cfg = vrf_cfg[0]
-
             if intf.is_external:
+                vrf_cfg = intf.re_search_children(VRF_EXT_INTF_REGEX)
+                vrf_cfg = self.get_single_cfg(vrf_cfg)
+                print("VRF: %s" % (vrf_cfg))
                 if vrf_cfg is not None: # external network has no vrf
                     print("External network shouldn't have VRF, deleting intf")
                     pending_delete_list.append(intf)
                     continue
-            else:    
+            else:
+                vrf_cfg = intf.re_search_children(VRF_INTF_REGEX)
+                vrf_cfg = self.get_single_cfg(vrf_cfg)
+                print("VRF: %s" % (vrf_cfg))
                 if not vrf_cfg:
-                    print("Internal network missing VRF, deleting intf")
+                    print("Internal network missing valid VRF, deleting intf")
                     pending_delete_list.append(intf)
                     continue
                 
@@ -313,10 +320,7 @@ class ConfigSyncTester(manager.Manager):
 
             # Fix NAT config
             intf_nat_type = intf.re_search_children(INTF_NAT_REGEX)
-            if len(intf_nat_type) != 1:
-                intf_nat_type = None
-            else:
-                intf_nat_type = intf_nat_type[0]
+            intf_nat_type = self.get_single_cfg(intf_nat_type)
 
             if intf_nat_type is not None:
                 intf_nat_type = intf_nat_type.re_match(INTF_NAT_REGEX, group=1)
@@ -329,18 +333,21 @@ class ConfigSyncTester(manager.Manager):
                         nat_cmd = XML_CMD_TAG % (intf.text)
                         nat_cmd += XML_CMD_TAG % ("ip nat outside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                        print("NAT type mismatch, should be outside")
                         #rpc_obj = conn.edit_config(target='running', config=confstr)
                 else:
                     if intf_nat_type != "inside":
                         nat_cmd = XML_CMD_TAG % (intf.text)
                         nat_cmd += XML_CMD_TAG % ("ip nat inside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                        print("NAT type mismatch, should be inside")
                         #rpc_obj = conn.edit_config(target='running', config=confstr)
             else:
                 if intf_nat_type is not None:
                     nat_cmd = XML_CMD_TAG % (intf.text)
                     nat_cmd += XML_CMD_TAG % ("no ip nat %s" % (intf_nat_type))
                     confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                    print("NAT type mismatch, should have no NAT")
                     #rpc_obj = conn.edit_config(target='running', config=confstr)
 
             
@@ -360,7 +367,7 @@ class ConfigSyncTester(manager.Manager):
                 #rpc_obj = conn.edit_config(target='running', config=confstr)
                 
 
-        print("Clear interfaces with invalid config")
+        print("\nClear interfaces with invalid config:\n--------------")
         for intf in pending_delete_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (intf.text))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
