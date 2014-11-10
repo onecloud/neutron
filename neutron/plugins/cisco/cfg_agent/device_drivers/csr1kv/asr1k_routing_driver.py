@@ -170,7 +170,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         vrf_name = self._csr_get_vrf_name(ri)
         in_vlan = self._get_interface_vlan_from_hosting_port(port)
-        acl_no = 'acl_' + str(in_vlan)
+        acl_no = 'neutron_acl_' + str(in_vlan)
         internal_cidr = port['ip_cidr']
         internal_net = netaddr.IPNetwork(internal_cidr).network
         netmask = netaddr.IPNetwork(internal_cidr).hostmask
@@ -197,7 +197,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
             in_intfc_name = self._get_interface_name_from_hosting_port(port, asr_ent)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
-            acls.append("acl_" + str(inner_vlan))
+            acls.append("neutron_acl_" + str(inner_vlan))
             self._remove_interface_nat(in_intfc_name, 'inside', asr_ent)
             
             #Wait for two second

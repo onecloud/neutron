@@ -28,6 +28,12 @@ INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
 DOT1Q_REGEX = "encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "ip nat (inside|outside)"
 HSRP_REGEX = "standby (\d+) .*"
+IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf nrouter-(\w{6,6}) redundancy neutron-hsrp-grp-(\d+)"
+# IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf \w+ redundancy \w+"
+NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf nrouter-(\w+) overload"
+ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
+ACL_CHILD_REGEX = "permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
@@ -168,11 +174,13 @@ class ConfigSyncTester(manager.Manager):
         running_cfg = self.get_running_config(conn)
         parsed_cfg = ciscoconfparse.CiscoConfParse(running_cfg)
 
-        self.sync_vrfs(conn, router_id_dict, parsed_cfg)
-        self.sync_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_vrfs(conn, router_id_dict, parsed_cfg)
+        self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_snat(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_nat_overload(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
 
 
-            
     def connect(self):
         asr_conn = nc_manager.connect(host="10.1.10.252",
                                       port=22,
@@ -216,7 +224,7 @@ class ConfigSyncTester(manager.Manager):
         return rconf_ids;
     
 
-    def sync_vrfs(self, conn, router_id_dict, parsed_cfg):
+    def clean_vrfs(self, conn, router_id_dict, parsed_cfg):
         
         ostk_router_ids = self.get_ostk_router_ids(router_id_dict)
         rconf_ids = self.get_running_config_router_ids(parsed_cfg)
@@ -241,13 +249,29 @@ class ConfigSyncTester(manager.Manager):
             confstr = snippets.CREATE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
+
     def get_single_cfg(self, cfg_line):
         if len(cfg_line) != 1:
             return None
         else:
             return cfg_line[0]
 
-    def sync_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+    def clean_snat(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        floating_ip_nats = parsed_cfg.find_objects(IP_NAT_REGEX)
+        for snat_rule in floating_ip_nats:
+            print("static nat rule: %s" % (snat_rule))
+
+    def clean_nat_overload(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
+        for nat_rule in nat_overloads:
+            print("nat overload rule: %s" % (nat_rule))
+
+    def clean_acls(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        acls = parsed_cfg.find_objects(ACL_REGEX)
+        for acl in acls:
+            print("acl: %s" % (acl))
+
+    def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children("description OPENSTACK_NEUTRON_INTF")]
@@ -334,21 +358,21 @@ class ConfigSyncTester(manager.Manager):
                         nat_cmd += XML_CMD_TAG % ("ip nat outside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                         print("NAT type mismatch, should be outside")
-                        #rpc_obj = conn.edit_config(target='running', config=confstr)
+                        rpc_obj = conn.edit_config(target='running', config=confstr)
                 else:
                     if intf_nat_type != "inside":
                         nat_cmd = XML_CMD_TAG % (intf.text)
                         nat_cmd += XML_CMD_TAG % ("ip nat inside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                         print("NAT type mismatch, should be inside")
-                        #rpc_obj = conn.edit_config(target='running', config=confstr)
+                        rpc_obj = conn.edit_config(target='running', config=confstr)
             else:
                 if intf_nat_type is not None:
                     nat_cmd = XML_CMD_TAG % (intf.text)
                     nat_cmd += XML_CMD_TAG % ("no ip nat %s" % (intf_nat_type))
                     confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                     print("NAT type mismatch, should have no NAT")
-                    #rpc_obj = conn.edit_config(target='running', config=confstr)
+                    rpc_obj = conn.edit_config(target='running', config=confstr)
 
             
             # Delete any hsrp config with wrong group number
@@ -364,7 +388,7 @@ class ConfigSyncTester(manager.Manager):
             if needs_hsrp_delete:
                 confstr = XML_FREEFORM_SNIPPET % (del_hsrp_cmd)
                 print("Deleting bad HSRP config: %s" % (confstr))
-                #rpc_obj = conn.edit_config(target='running', config=confstr)
+                rpc_obj = conn.edit_config(target='running', config=confstr)
                 
 
         print("\nClear interfaces with invalid config:\n--------------")
@@ -373,7 +397,7 @@ class ConfigSyncTester(manager.Manager):
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             print("Deleting %s" % (intf.text))
             print(confstr)
-            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
 
 
 class StandaloneService(neutron_service.Service):
