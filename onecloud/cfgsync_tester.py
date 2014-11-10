@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from ncclient import manager as nc_manager
 import ciscoconfparse
 import sys
+import ipaddr
 
 from neutron import manager
 from neutron.agent.common import config
@@ -28,7 +29,7 @@ INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
 DOT1Q_REGEX = "encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "ip nat (inside|outside)"
 HSRP_REGEX = "standby (\d+) .*"
-IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf nrouter-(\w{6,6}) redundancy neutron-hsrp-grp-(\d+)"
+SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf nrouter-(\w{6,6}) redundancy neutron-hsrp-grp-(\d+)"
 # IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf \w+ redundancy \w+"
 NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf nrouter-(\w+) overload"
 ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
@@ -176,7 +177,7 @@ class ConfigSyncTester(manager.Manager):
 
         self.clean_vrfs(conn, router_id_dict, parsed_cfg)
         self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
-        self.clean_snat(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_snat(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_nat_overload(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
 
@@ -256,10 +257,51 @@ class ConfigSyncTester(manager.Manager):
         else:
             return cfg_line[0]
 
-    def clean_snat(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
-        floating_ip_nats = parsed_cfg.find_objects(IP_NAT_REGEX)
+    def clean_snat(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
         for snat_rule in floating_ip_nats:
             print("static nat rule: %s" % (snat_rule))
+            match_obj = re.match(SNAT_REGEX, snat_rule.text)
+            inner_ip, outer_ip, router_id, segment_id = match_obj.group(1,2,3,4)
+            segment_id = int(segment_id)
+            print("   in_ip: %s, out_ip: %s, router_id: %s, segment_id: %s" % (inner_ip,
+                                                                               outer_ip,
+                                                                               router_id,
+                                                                               segment_id))
+            
+            # Check that VRF exists in openstack DB info
+            if router_id not in router_id_dict:
+                print("router not found for rule, deleting")
+                continue
+
+            # Check that router has external network and segment_id matches
+            router = router_id_dict[router_id]
+            if "gw_port" not in router:
+                print("router has no gw_port, snat is invalid, deleting")
+                continue
+            
+            gw_port = router['gw_port']
+            gw_segment_id = gw_port['hosting_info']['segmentation_id']
+            if segment_id != gw_segment_id:
+                print("snat segment_id does not match router's gw segment_id, deleting")
+                continue
+            
+            # Check that in,out ip pair matches a floating_ip defined on router
+            if '_floatingips' not in router:
+                print("Router has no floating IPs defined, snat rule is invalid, deleting")
+                continue
+
+            fip_match_found = False
+            for floating_ip in router['_floatingips']:
+                if inner_ip == floating_ip['fixed_ip_address'] and \
+                   outer_ip == floating_ip['floating_ip_address']:
+                    fip_match_found = True
+                    break
+            if fip_match_found is False:
+                print("snat rule does not match defined floating IPs, deleting")
+                continue
+
+            
 
     def clean_nat_overload(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
