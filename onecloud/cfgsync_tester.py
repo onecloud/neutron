@@ -424,6 +424,7 @@ class ConfigSyncTester(manager.Manager):
         print("intf_segment_dict: %s" % (intf_segment_dict))
         pending_delete_list = []
 
+        # TODO: split this big function into smaller functions
         for intf in runcfg_intfs:
             print("\nOpenstack interface: %s" % (intf))
             intf.intf_num = int(intf.re_match(INTF_REGEX, group=1))
