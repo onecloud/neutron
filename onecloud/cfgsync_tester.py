@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from ncclient import manager as nc_manager
 import ciscoconfparse
 import sys
-import ipaddr
+import netaddr
 
 from neutron import manager
 from neutron.agent.common import config
@@ -33,7 +33,7 @@ SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (
 # IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf \w+ redundancy \w+"
 NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf nrouter-(\w+) overload"
 ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
-ACL_CHILD_REGEX = "permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
@@ -178,7 +178,7 @@ class ConfigSyncTester(manager.Manager):
         self.clean_vrfs(conn, router_id_dict, parsed_cfg)
         self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_snat(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
-        self.clean_nat_overload(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_nat_overload(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
 
 
@@ -258,6 +258,7 @@ class ConfigSyncTester(manager.Manager):
             return cfg_line[0]
 
     def clean_snat(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        delete_fip_list = []
         floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
         for snat_rule in floating_ip_nats:
             print("static nat rule: %s" % (snat_rule))
@@ -272,23 +273,27 @@ class ConfigSyncTester(manager.Manager):
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
                 print("router not found for rule, deleting")
+                delete_fip_list.append(snat_rule.text)
                 continue
 
             # Check that router has external network and segment_id matches
             router = router_id_dict[router_id]
             if "gw_port" not in router:
                 print("router has no gw_port, snat is invalid, deleting")
+                delete_fip_list.append(snat_rule.text)
                 continue
             
             gw_port = router['gw_port']
             gw_segment_id = gw_port['hosting_info']['segmentation_id']
             if segment_id != gw_segment_id:
                 print("snat segment_id does not match router's gw segment_id, deleting")
+                delete_fip_list.append(snat_rule.text)
                 continue
             
             # Check that in,out ip pair matches a floating_ip defined on router
             if '_floatingips' not in router:
                 print("Router has no floating IPs defined, snat rule is invalid, deleting")
+                delete_fip_list.append(snat_rule.text)
                 continue
 
             fip_match_found = False
@@ -299,19 +304,117 @@ class ConfigSyncTester(manager.Manager):
                     break
             if fip_match_found is False:
                 print("snat rule does not match defined floating IPs, deleting")
+                delete_fip_list.append(snat_rule.text)
                 continue
-
+        
+        for fip_cfg in delete_fip_list:
+             del_cmd = XML_CMD_TAG % ("no %s" % (snat_rule.text))
+             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
+             #rpc_obj = conn.edit_config(target='running', config=confstr)
             
-
-    def clean_nat_overload(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+            
+    def clean_nat_overload(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        delete_nat_list = []
         nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
         for nat_rule in nat_overloads:
             print("nat overload rule: %s" % (nat_rule))
+            match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
+            segment_id, intf_num, intf_segment_id, router_id = match_obj.group(1,2,3,4)
+            
+            segment_id = int(segment_id)
+            intf_num = int(intf_num)
+            intf_segment_id = int(intf_segment_id)
+
+            if segment_id != intf_segment_id:
+                print("Interface segment and ACL segment mismatch, deleting rule")
+                delete_nat_list.append(nat_rule.text)
+                continue
+
+            # Check that VRF exists in openstack DB info
+            if router_id not in router_id_dict:
+                print("router not found for rule, deleting")
+                delete_nat_list.append(nat_rule.text)
+                continue
+
+            # Check that router has external network
+            router = router_id_dict[router_id]
+            if "gw_port" not in router:
+                print("router has no gw_port, nat overload is invalid, deleting")
+                delete_nat_list.append(nat_rule.text)
+                continue
+
+            # Check that router has internal network interface on segment_id
+            intf_match_found = False
+            for intf in router['_interfaces']:
+                if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
+                    intf_segment_id = intf['hosting_info']['segmentation_id']
+                    if intf_segment_id == segment_id:
+                        intf_match_found = True
+                        break
+            if intf_match_found is False:
+                print("router does not have this internal network assigned, deleting rule")
+                delete_nat_list.append(nat_rule.text)
+                continue
+            
+        for nat_cfg in delete_nat_list:
+            del_cmd = XML_CMD_TAG % ("no %s" % (nat_rule.text))
+            confstr = XML_FREEFORM_SNIPPET % (del_cmd)
+            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            
+
+    def check_acl_permit_rules_valid(self, segment_id, acl, intf_segment_dict):
+        permit_rules = acl.re_search_children(ACL_CHILD_REGEX)
+        for permit_rule in permit_rules:
+            print("  permit rule: %s" % (permit_rule))
+            match_obj = re.match(ACL_CHILD_REGEX, permit_rule.text)
+            net_ip, hostmask = match_obj.group(1,2)
+            
+            cfg_subnet = netaddr.IPNetwork("%s/%s" % (net_ip, hostmask))
+            
+            db_subnet = netaddr.IPNetwork("255.255.255.255/32") # dummy value
+            intf_list = intf_segment_dict[segment_id]
+            for intf in intf_list:
+                if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
+                    subnet_cidr = intf['subnet']['cidr']
+                    db_subnet = netaddr.IPNetwork(subnet_cidr)
+                    break
+
+            print("cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
+                                                           cfg_subnet.prefixlen,
+                                                           db_subnet.network,
+                                                           db_subnet.prefixlen))
+            if cfg_subnet.network != db_subnet.network or \
+               cfg_subnet.prefixlen != db_subnet.prefixlen:
+                print("ACL subnet does not match subnet info in openstack DB, deleting ACL")
+                return False
+        
+        return True
 
     def clean_acls(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        delete_acl_list = []
         acls = parsed_cfg.find_objects(ACL_REGEX)
         for acl in acls:
             print("acl: %s" % (acl))
+            match_obj = re.match(ACL_REGEX, acl.text)
+            segment_id = match_obj.group(1)
+            segment_id = int(segment_id)
+            print("   segment_id: %s" % (segment_id))
+            
+            # Check that segment_id exists in openstack DB info
+            if segment_id not in intf_segment_dict:
+                print("Segment ID not found, deleting acl")
+                delete_acl_list.append(acl.text)
+
+            # Check that permit rules match subnets defined on openstack intfs
+            if self.check_acl_permit_rules_valid(segment_id, acl, intf_segment_dict) is False:
+                delete_acl_list.append(acl.text)
+
+            
+        for acl_cfg in delete_acl_list:
+            del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg.text))
+            confstr = XML_FREEFORM_SNIPPET % (del_cmd)
+            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            
 
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         
@@ -329,6 +432,9 @@ class ConfigSyncTester(manager.Manager):
 
             # Delete any interfaces where config doesn't match DB
             # Correct config will be added after clearing invalid cfg
+
+            # TODO: Check that interface name (e.g. Port-channel10) matches that
+            #       specified in .ini file
 
             # Check that the interface segment_id exists in the current DB data
             if intf.segment_id not in intf_segment_dict:
