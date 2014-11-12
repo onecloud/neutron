@@ -248,7 +248,7 @@ class ConfigSyncTester(manager.Manager):
         for router_id in del_set:
             vrf_name = "nrouter-%s" % (router_id)
             confstr = snippets.REMOVE_VRF % vrf_name
-            rpc_obj = conn.edit_config(target='running', config=confstr)
+            #rpc_obj = conn.edit_config(target='running', config=confstr)
             
         for router_id in add_set:
             vrf_name = "nrouter-%s" % (router_id)
@@ -266,7 +266,7 @@ class ConfigSyncTester(manager.Manager):
         delete_fip_list = []
         floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
         for snat_rule in floating_ip_nats:
-            print("static nat rule: %s" % (snat_rule))
+            print("\nstatic nat rule: %s" % (snat_rule))
             match_obj = re.match(SNAT_REGEX, snat_rule.text)
             inner_ip, outer_ip, router_id, segment_id = match_obj.group(1,2,3,4)
             segment_id = int(segment_id)
@@ -313,7 +313,7 @@ class ConfigSyncTester(manager.Manager):
                 continue
         
         for fip_cfg in delete_fip_list:
-             del_cmd = XML_CMD_TAG % ("no %s" % (snat_rule.text))
+             del_cmd = XML_CMD_TAG % ("no %s" % (fip_cfg))
              confstr = XML_FREEFORM_SNIPPET % (del_cmd)
              #rpc_obj = conn.edit_config(target='running', config=confstr)
             
@@ -322,7 +322,7 @@ class ConfigSyncTester(manager.Manager):
         delete_nat_list = []
         nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
         for nat_rule in nat_overloads:
-            print("nat overload rule: %s" % (nat_rule))
+            print("\nnat overload rule: %s" % (nat_rule))
             match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
             segment_id, intf_num, intf_segment_id, router_id = match_obj.group(1,2,3,4)
             
@@ -362,7 +362,7 @@ class ConfigSyncTester(manager.Manager):
                 continue
             
         for nat_cfg in delete_nat_list:
-            del_cmd = XML_CMD_TAG % ("no %s" % (nat_rule.text))
+            del_cmd = XML_CMD_TAG % ("no %s" % (nat_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             #rpc_obj = conn.edit_config(target='running', config=confstr)
             
@@ -370,7 +370,7 @@ class ConfigSyncTester(manager.Manager):
     def check_acl_permit_rules_valid(self, segment_id, acl, intf_segment_dict):
         permit_rules = acl.re_search_children(ACL_CHILD_REGEX)
         for permit_rule in permit_rules:
-            print("  permit rule: %s" % (permit_rule))
+            print("   permit rule: %s" % (permit_rule))
             match_obj = re.match(ACL_CHILD_REGEX, permit_rule.text)
             net_ip, hostmask = match_obj.group(1,2)
             
@@ -384,7 +384,7 @@ class ConfigSyncTester(manager.Manager):
                     db_subnet = netaddr.IPNetwork(subnet_cidr)
                     break
 
-            print("cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
+            print("   cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
                                                            cfg_subnet.prefixlen,
                                                            db_subnet.network,
                                                            db_subnet.prefixlen))
@@ -399,7 +399,7 @@ class ConfigSyncTester(manager.Manager):
         delete_acl_list = []
         acls = parsed_cfg.find_objects(ACL_REGEX)
         for acl in acls:
-            print("acl: %s" % (acl))
+            print("\nacl: %s" % (acl))
             match_obj = re.match(ACL_REGEX, acl.text)
             segment_id = match_obj.group(1)
             segment_id = int(segment_id)
@@ -416,7 +416,7 @@ class ConfigSyncTester(manager.Manager):
 
             
         for acl_cfg in delete_acl_list:
-            del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg.text))
+            del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             #rpc_obj = conn.edit_config(target='running', config=confstr)
             
@@ -544,8 +544,6 @@ class ConfigSyncTester(manager.Manager):
                 print("Deleting bad HSRP config: %s" % (confstr))
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 
-
-        print("\nClear interfaces with invalid config:\n--------------")
         for intf in pending_delete_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (intf.text))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
