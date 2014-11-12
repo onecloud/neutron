@@ -6,6 +6,11 @@ from oslo.config import cfg
 from neutron.common import config as common_config
 
 
+'''
+How to run:
+python rpc_tester.py --config-file /etc/neutron/neutron.conf
+'''
+
 class TestRPCNotifier(proxy.RpcProxy):
     BASE_RPC_API_VERSION = '1.0'
 
@@ -33,3 +38,5 @@ def rpc_tester_main():
 if __name__ == "__main__":
     rpc_tester_main()
 
+
+ 

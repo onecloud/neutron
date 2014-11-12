@@ -22,6 +22,11 @@ from neutron.common import constants
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 
+'''
+How to run:
+python cfgsync_tester.py --config-file /etc/neutron/neutron.conf
+'''
+
 VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
 VRF_EXT_INTF_REGEX = "ip vrf forwarding .*"
 VRF_INTF_REGEX = "ip vrf forwarding nrouter-(\w{6,6})"
