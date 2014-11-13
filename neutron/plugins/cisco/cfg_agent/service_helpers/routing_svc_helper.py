@@ -777,12 +777,12 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                     self._process_router(ri)
                 except KeyError as e:
                     LOG.exception(_("Key Error, missing key: %s"), e)
-                    self.updated_routers.add(r['id'])
+                    self.updated_routers.update([r['id']]) # make sure the ID is in a list
                     continue
                 except cfg_exceptions.DriverException as e:
                     LOG.exception(_("Driver Exception on router:%(id)s. "
                                     "Error is %(e)s"), {'id': r['id'], 'e': e})
-                    self.updated_routers.update(r['id'])
+                    self.updated_routers.update([r['id']])
                     continue
             # identify and remove routers that no longer exist
             for router_id in prev_router_ids - cur_router_ids:
@@ -863,5 +863,5 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
             self._routes_updated(ri)
         except cfg_exceptions.DriverException as e:
             with excutils.save_and_reraise_exception():
-                self.updated_routers.update(ri.router_id)
+                self.updated_routers.update([ri.router_id])
                 LOG.error(e)

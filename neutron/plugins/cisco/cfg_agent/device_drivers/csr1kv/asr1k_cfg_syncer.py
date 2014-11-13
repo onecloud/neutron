@@ -25,7 +25,6 @@ NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port
 ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
 
