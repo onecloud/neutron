@@ -669,13 +669,14 @@ class RoutingServiceHelper(object):
 
 class PhyRouterContext(RoutingServiceHelper):
 
-    def __init__(self, asr_ent, plugin_rpc):
+    def __init__(self, asr_ent, plugin_rpc, context):
         self.router_info = {}
         self.updated_routers = set()
         self.removed_routers = set()
         self.sync_devices = set()
         self.fullsync = True
         self.plugin_rpc = plugin_rpc
+        self.context = context
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
 
     def process_service(self, device_ids=None, removed_devices_info=None):
@@ -874,7 +875,7 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
 
         self._asr_contexts = {}
         for asr in self._asr_config.get_asr_list():
-            self._asr_contexts[asr['name']] = PhyRouterContext(asr, self.plugin_rpc)
+            self._asr_contexts[asr['name']] = PhyRouterContext(asr, self.plugin_rpc, self.context)
         
 
     ### Notifications from Plugin ####
@@ -910,4 +911,9 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.process_service(device_ids, removed_devices_info)
 
- 
+    def collect_state(self, configurations):
+        if len(self._asr_contexts) < 1:
+            return configurations
+        
+        asr_ctx = self._asr_contexts.values()[0]
+        return asr_ctx.collect_state(configurations)
