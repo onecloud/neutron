@@ -13,6 +13,7 @@ from neutron.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import asr1k_cfg_syncer
 
 from neutron.common import constants
 
@@ -83,17 +84,20 @@ class ASR1kConfigInfo(object):
 
 class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
-    def __init__(self, **device_params):
+    def __init__(self, target_asr):
         self._asr_config = ASR1kConfigInfo()
         self._csr_conn = None
         self._intfs_enabled = False
         self._ignore_cfg_check = False
         self.hsrp_group_base = 200
         self.hsrp_real_ip_base = 200
+        self.target_asr = target_asr
         return
 
     def _get_asr_list(self):
-        return self._asr_config.get_asr_list()
+        asr_ent = self.get_asr_by_name(self.target_asr['name'])
+        return [asr_ent]
+        #return self._asr_config.get_asr_list()
 
     def _get_asr_ent_from_port(self, port):
         asr_name = port['phy_router_db']['name']
@@ -103,6 +107,19 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _port_is_hsrp(self, port):
         hsrp_types = [constants.DEVICE_OWNER_ROUTER_HA_GW, constants.DEVICE_OWNER_ROUTER_HA_INTF]
         return port['device_owner'] in hsrp_types
+
+    def _port_needs_config(self, port):
+        if not self._port_is_hsrp(port):
+            LOG.info("ignoring non-HSRP interface")
+            return False
+        
+        asr_ent = self._get_asr_ent_from_port(port)
+        if asr_ent['name'] != self.target_asr['name']:
+            LOG.info("ignoring interface for non-target ASR")
+            return False
+        
+        return True
+        
         
 
     ###### Public Functions ########
@@ -120,6 +137,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if ex_gw_ip:
             # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
+
+
+        
     
 
 
@@ -127,8 +147,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
 
-        if not self._port_is_hsrp(port):
-            LOG.info("ignoring create non-HSRP interface")
+        if not self._port_needs_config(port):
             return
         
         vrf_name = self._csr_get_vrf_name(ri)
@@ -152,8 +171,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_remove_subinterface(self, port):
 
-        if not self._port_is_hsrp(port):
-            LOG.info("ignoring remove non-HSRP interface")
+        if not self._port_needs_config(port):
             return
 
         asr_ent = self._get_asr_ent_from_port(port)
@@ -163,8 +181,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
-        if not self._port_is_hsrp(port):
-            LOG.info("ignoring add internalnw_nat non-HSRP interface")
+        if not self._port_needs_config(port):
             return
 
 
@@ -189,8 +206,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #First disable nat in all inner ports
         for port in ports:
 
-            if not self._port_is_hsrp(port):
-                LOG.info("ignoring remove_internalnw_nat on non-HSRP interface")
+            if not self._port_needs_config(port):
                 continue
                 
             asr_ent = self._get_asr_ent_from_port(port)
@@ -230,7 +246,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
-        #if not self._port_is_hsrp(ex_gw_port):
+        #if not self._port_needs_config(ex_gw_port):
         #    LOG.info("ignoring add floating ip non-HSRP interface")
         #    return
         
@@ -241,7 +257,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
-        #if not self._port_is_hsrp(ex_gw_port):
+        #if not self._port_needs_config(ex_gw_port):
         #    LOG.info("ignoring remove floating ip non-HSRP interface")
         #    return
         
@@ -286,8 +302,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
 
-        if not self._port_is_hsrp(port):
-            LOG.info("ignoring add ha non-HSRP interface")
+        if not self._port_needs_config(port):
             return
 
         vlan = self._get_interface_vlan_from_hosting_port(port)
@@ -560,6 +575,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             return ioscfg
 
 
+    def _delete_invalid_cfg(self, cfg_syncer, asr_ent):
+        conn = self._get_connection(asr_ent)
+        cfg_syncer.delete_invalid_cfg(conn)
+
 
     ###### Internal "Support" Functions ########
 
@@ -608,17 +627,3 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                            'timeout': self._timeout, 'reason': e.message}
             raise cfg_exc.CSR1kvConnectionException(**conn_params)
 
-
-'''
-NOTES, TODO:
-
-We need to configure multiple ASRs, current code expects one "connection"
-on which the code can call get_config, edit_config
-
-
-http://tools.ietf.org/html/rfc6241#appendix-E.2
-Netconf doesn't really have multi-node transcations built-in
-Need to config lock the nodes, apply config, and then deal with partial failure
-  i.e. retry later or undo the partial config, then release cfg locks
-
-'''

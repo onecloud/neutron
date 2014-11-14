@@ -104,9 +104,10 @@ class DeviceDriverManager(object):
 
 class PhysicalDeviceDriverManager(DeviceDriverManager):
 
-    def __init__(self):
+    def __init__(self, asr_ent):
         self._drivers = {}
         self._global_driver = None
+        self._asr_ent = asr_ent
 
     def get_driver(self, resource_id):
         try:
@@ -130,10 +131,9 @@ class PhysicalDeviceDriverManager(DeviceDriverManager):
             if self._global_driver is not None:
                 return self._global_driver
             else:
-                hosting_device = resource['hosting_device']
                 driver_class = resource['router_type']['cfg_agent_driver']
                 driver = importutils.import_object(driver_class,
-                                                   **hosting_device)
+                                                   self._asr_ent)
                 self._global_driver = driver
                                     
             return driver

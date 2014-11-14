@@ -30,6 +30,12 @@ XML_CMD_TAG = "<cmd>%s</cmd>"
 
 class ConfigSyncer(object):
 
+    def __init__(self, router_db_info):
+        router_id_dict, interface_segment_dict, segment_nat_dict = self.process_routers_data(router_db_info)
+        self.router_id_dict = router_id_dict
+        self.interface_segment_dict = interface_segment_dict
+        self.segment_nat_dict = segment_nat_dict
+
     def process_routers_data(self, routers):
         router_id_dict = {}
         interface_segment_dict = {}
@@ -81,8 +87,10 @@ class ConfigSyncer(object):
             
         return router_id_dict, interface_segment_dict, segment_nat_dict
 
-    def delete_invalid_cfg(self, routers, conn):
-        router_id_dict, intf_segment_dict, segment_nat_dict = self.process_routers_data(routers)
+    def delete_invalid_cfg(self, conn):
+        router_id_dict = self.router_id_dict
+        intf_segment_dict = self.intf_segment_dict
+        segment_nat_dict = self.segment_nat_dict
 
         print("*************************")
 
