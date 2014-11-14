@@ -45,9 +45,6 @@ from neutron import service as neutron_service
 
 from neutron.openstack.common.rpc import proxy # ICEHOUSE_BACKPORT
 
-from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1kv_driver)
-
-
 LOG = logging.getLogger(__name__)
 
 # Constants for agent registration.
@@ -413,10 +410,8 @@ def trace_calls(current_frame, why, arg):
         pass
 
 
-#def main(manager='neutron.plugins.cisco.cfg_agent.'
-#                 'cfg_agent.CiscoCfgAgentWithStateReport'):
 def main(manager='neutron.plugins.cisco.cfg_agent.'
-                 'cfg_agent.CiscoCfgAgentASR'):
+                 'cfg_agent.CiscoCfgAgentWithStateReport'):
     conf = cfg.CONF
     conf.register_opts(CiscoCfgAgent.OPTS)
     config.register_agent_state_opts_helper(conf)
@@ -442,54 +437,3 @@ def main(manager='neutron.plugins.cisco.cfg_agent.'
         report_interval=cfg.CONF.AGENT.report_interval,
         manager=manager)
     service.launch(server).wait()
-
-
-
-
-class CiscoCfgAgentASR(CiscoCfgAgentWithStateReport):
-
-# config agent with multiple routing_svc_helpers, one per physical ASR
-
-    def __init__(self, host, conf=None):
-        self.conf = conf or cfg.CONF
-        self._dev_status = device_status.DeviceStatus()
-        self.context = n_context.get_admin_context_without_session()
-
-        self._asr_config = asr1kv_driver.ASR1kConfigInfo()
-
-        self._initialize_rpc(host)
-        self._initialize_service_helpers(host)
-        self._start_periodic_tasks()
-        super(CiscoCfgAgent, self).__init__(host=self.conf.host)
-
-
-    def _initialize_service_helpers(self, host):
-        #svc_helper_class = self.conf.routing_svc_helper_class
-        svc_helper_class = 'neutron.plugins.cisco.cfg_agent.service_helpers' \
-                           '.routing_svc_helper.PhysicalRoutingServiceHelper'
-        self.asr_svc_helpers = {}
-        try:
-            for asr in self._asr_config.get_asr_list():
-                svc_helper = importutils.import_object(svc_helper_class, host, self.conf, self, asr)
-                self.asr_svc_helpers[asr['name']] = svc_helper
-        except ImportError as e:
-            LOG.warn(_("Error in loading routing service helper. Class "
-                       "specified is %(class)s. Reason:%(reason)s"),
-                     {'class': svc_helper_class,
-                      'reason': e})
-            self.asr_service_helpers = None
-
-
-    def process_services(self, device_ids=None, removed_devices_info=None):
-        """Process services managed by this config agent. """
-
-        LOG.debug("Processing services started")
-        # Now we process only routing service, additional services will be
-        # added in future
-        if self.asr_svc_helpers:
-            for svc_helper in self.asr_svc_helpers:
-                svc_helper.process_service(device_ids, removed_devices_info)
-        else:
-            LOG.warn(_("No routing service helper loaded"))
-
-        LOG.debug("Processing services completed")

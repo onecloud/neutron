@@ -668,10 +668,9 @@ class RoutingServiceHelper(object):
 
 class PhysicalRoutingServiceHelper(RoutingServiceHelper):
 
-    def __init__(self, host, conf, cfg_agent, asr_ent):
-        host = ("%s.%s" % (host, asr_ent['name'])) # setup separate queue for each phy ASR
+    def __init__(self, host, conf, cfg_agent):
         super(PhysicalRoutingServiceHelper, self).__init__(host, conf, cfg_agent)
-        self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
+        self._drivermgr = driver_mgr.PhysicalDeviceDriverManager()
 
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
