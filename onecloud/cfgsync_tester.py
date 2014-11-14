@@ -248,7 +248,7 @@ class ConfigSyncTester(manager.Manager):
         for router_id in del_set:
             vrf_name = "nrouter-%s" % (router_id)
             confstr = snippets.REMOVE_VRF % vrf_name
-            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
             
         for router_id in add_set:
             vrf_name = "nrouter-%s" % (router_id)
@@ -315,7 +315,7 @@ class ConfigSyncTester(manager.Manager):
         for fip_cfg in delete_fip_list:
              del_cmd = XML_CMD_TAG % ("no %s" % (fip_cfg))
              confstr = XML_FREEFORM_SNIPPET % (del_cmd)
-             #rpc_obj = conn.edit_config(target='running', config=confstr)
+             rpc_obj = conn.edit_config(target='running', config=confstr)
             
             
     def clean_nat_overload(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
@@ -364,7 +364,7 @@ class ConfigSyncTester(manager.Manager):
         for nat_cfg in delete_nat_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (nat_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
-            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
             
 
     def check_acl_permit_rules_valid(self, segment_id, acl, intf_segment_dict):
@@ -418,7 +418,7 @@ class ConfigSyncTester(manager.Manager):
         for acl_cfg in delete_acl_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
-            #rpc_obj = conn.edit_config(target='running', config=confstr)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
             
 
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
