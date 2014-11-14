@@ -34,6 +34,9 @@ from neutron.plugins.cisco.common import cisco_constants as c_constants
 from neutron.openstack.common.rpc import proxy  # ICEHOUSE_BACKPORT
 from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1kv_driver)
+
+
 
 LOG = logging.getLogger(__name__)
 
@@ -664,13 +667,15 @@ class RoutingServiceHelper(object):
 
 
 
+class PhyRouterContext(RoutingServiceHelper):
 
-
-class PhysicalRoutingServiceHelper(RoutingServiceHelper):
-
-    def __init__(self, host, conf, cfg_agent, asr_ent):
-        host = ("%s.%s" % (host, asr_ent['name'])) # setup separate queue for each phy ASR
-        super(PhysicalRoutingServiceHelper, self).__init__(host, conf, cfg_agent)
+    def __init__(self, asr_ent, plugin_rpc):
+        self.router_info = {}
+        self.updated_routers = set()
+        self.removed_routers = set()
+        self.sync_devices = set()
+        self.fullsync = True
+        self.plugin_rpc = plugin_rpc
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
 
     def process_service(self, device_ids=None, removed_devices_info=None):
@@ -695,20 +700,6 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                     LOG.debug("Updated routers:%s", router_ids)
                     self.updated_routers.clear()
                     routers = self._fetch_router_info(router_ids=router_ids)
-                if device_ids:
-                    LOG.debug("Adding new devices:%s", device_ids)
-                    self.sync_devices = set(device_ids) | self.sync_devices
-                if self.sync_devices:
-                    sync_devices_list = list(self.sync_devices)
-                    LOG.debug("Fetching routers on:%s", sync_devices_list)
-                    routers.extend(self._fetch_router_info(
-                        device_ids=sync_devices_list))
-                    self.sync_devices.clear()
-                if removed_devices_info:
-                    if removed_devices_info.get('deconfigure'):
-                        ids = self._get_router_ids_from_removed_devices_info(
-                            removed_devices_info)
-                        self.removed_routers = self.removed_routers | set(ids)
                 if self.removed_routers:
                     removed_routers_ids = list(self.removed_routers)
                     LOG.debug("Removed routers:%s", removed_routers_ids)
@@ -807,7 +798,7 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
                      if p['id'] not in current_port_ids]
 
         return old_ports, new_ports
-    
+
     def _process_router(self, ri):
         """Process a router, apply latest configuration and update router_info.
 
@@ -866,3 +857,57 @@ class PhysicalRoutingServiceHelper(RoutingServiceHelper):
             with excutils.save_and_reraise_exception():
                 self.updated_routers.update([ri.router_id])
                 LOG.error(e)
+
+
+
+class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
+
+    def __init__(self, host, conf, cfg_agent):
+        self.conf = conf
+        self.cfg_agent = cfg_agent
+        self.context = n_context.get_admin_context_without_session()
+        self.plugin_rpc = CiscoRoutingPluginApi(topics.L3PLUGIN, host)
+        self._dev_status = device_status.DeviceStatus()        
+        self.topic = '%s.%s' % (c_constants.CFG_AGENT_L3_ROUTING, host)
+        self._setup_rpc()
+        self._asr_config = asr1kv_driver.ASR1kConfigInfo()
+
+        self._asr_contexts = {}
+        for asr in self._asr_config.get_asr_list():
+            self._asr_contexts[asr['name']] = PhyRouterContext(asr, self.plugin_rpc)
+        
+
+    ### Notifications from Plugin ####
+
+    def router_deleted(self, context, routers):
+        """Deal with router deletion RPC message."""
+        LOG.debug('Got router deleted notification for %s', routers)
+        for asr_name, asr_ctx in self._asr_contexts.iteritems():
+            asr_ctx.removed_routers.update(routers)
+
+    def routers_updated(self, context, routers):
+        """Deal with routers modification and creation RPC message."""
+        LOG.debug('Got routers updated notification :%s', routers)
+        if routers:
+            # This is needed for backward compatibility
+            if isinstance(routers[0], dict):
+                routers = [router['id'] for router in routers]
+            for asr_name, asr_ctx in self._asr_contexts.iteritems():
+                asr_ctx.updated_routers.update(routers)
+
+    def router_removed_from_agent(self, context, payload):
+        LOG.debug('Got router removed from agent :%r', payload)
+        for asr_name, asr_ctx in self._asr_contexts.iteritems():
+            asr_ctx.removed_routers.add(payload['router_id'])
+
+    def router_added_to_agent(self, context, payload):
+        LOG.debug('Got router added to agent :%r', payload)
+        self.routers_updated(context, payload)
+
+    # Routing service helper public methods
+
+    def process_service(self, device_ids=None, removed_devices_info=None):
+        for asr_name, asr_ctx in self._asr_contexts.iteritems():
+            asr_ctx.process_service(device_ids, removed_devices_info)
+
+ 
