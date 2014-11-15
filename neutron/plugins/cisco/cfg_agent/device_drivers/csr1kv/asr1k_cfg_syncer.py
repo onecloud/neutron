@@ -6,11 +6,9 @@ from neutron.common import constants
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
+from neutron.openstack.common import log as logging
 
-'''
-How to run:
-python cfgsync_tester.py --config-file /etc/neutron/neutron.conf
-'''
+LOG = logging.getLogger(__name__)
 
 VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
 VRF_EXT_INTF_REGEX = "ip vrf forwarding .*"
@@ -92,25 +90,25 @@ class ConfigSyncer(object):
         intf_segment_dict = self.intf_segment_dict
         segment_nat_dict = self.segment_nat_dict
 
-        print("*************************")
+        LOG.info("*************************")
 
         for router_id, router in router_id_dict.iteritems():
-            #print("ROUTER ID: %s   DATA: %s\n\n" % (router_id, router))
-            print("ROUTER_ID: %s" % (router_id))
+            #LOG.info("ROUTER ID: %s   DATA: %s\n\n" % (router_id, router))
+            LOG.info("ROUTER_ID: %s" % (router_id))
 
-        print("\n")
+        LOG.info("\n")
 
         for segment_id, intf_list in intf_segment_dict.iteritems():
-            print("SEGMENT_ID: %s" % (segment_id))
+            LOG.info("SEGMENT_ID: %s" % (segment_id))
             for intf in intf_list:
                 dev_owner = intf['device_owner']
                 dev_id = intf['device_id'][0:6]
                 ip_addr = intf['fixed_ips'][0]['ip_address']
                 if 'phy_router_db' in intf.keys():
                     phy_router_name = intf['phy_router_db']['name']
-                    print("    INTF: %s, %s, %s, %s" % (ip_addr, dev_id, dev_owner, phy_router_name))
+                    LOG.info("    INTF: %s, %s, %s, %s" % (ip_addr, dev_id, dev_owner, phy_router_name))
                 else:
-                    print("    INTF: %s, %s, %s" % (ip_addr, dev_id, dev_owner))
+                    LOG.info("    INTF: %s, %s, %s" % (ip_addr, dev_id, dev_owner))
 
         running_cfg = self.get_running_config(conn)
         parsed_cfg = ciscoconfparse.CiscoConfParse(running_cfg)
@@ -144,9 +142,9 @@ class ConfigSyncer(object):
         rconf_ids = []
 
         for parsed_obj in parsed_cfg.find_objects(VRF_REGEX):
-            print("VRF object: %s" % (parsed_obj))
+            LOG.info("VRF object: %s" % (parsed_obj))
             router_id = parsed_obj.re_match(VRF_REGEX)
-            print("    First 6 digits of router ID: %s\n" % (router_id))
+            LOG.info("    First 6 digits of router ID: %s\n" % (router_id))
             rconf_ids.append(router_id)
 
         return rconf_ids;
@@ -163,9 +161,9 @@ class ConfigSyncer(object):
         add_set = source_set.difference(dest_set)
         del_set = dest_set.difference(source_set)
         
-        print("VRF DB set: %s" % (source_set))
-        print("VRFs to delete: %s" % (del_set))
-        print("VRFs to add: %s" % (add_set))
+        LOG.info("VRF DB set: %s" % (source_set))
+        LOG.info("VRFs to delete: %s" % (del_set))
+        LOG.info("VRFs to add: %s" % (add_set))
         
         for router_id in del_set:
             vrf_name = "nrouter-%s" % (router_id)
@@ -188,38 +186,38 @@ class ConfigSyncer(object):
         delete_fip_list = []
         floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
         for snat_rule in floating_ip_nats:
-            print("\nstatic nat rule: %s" % (snat_rule))
+            LOG.info("\nstatic nat rule: %s" % (snat_rule))
             match_obj = re.match(SNAT_REGEX, snat_rule.text)
             inner_ip, outer_ip, router_id, segment_id = match_obj.group(1,2,3,4)
             segment_id = int(segment_id)
-            print("   in_ip: %s, out_ip: %s, router_id: %s, segment_id: %s" % (inner_ip,
+            LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, segment_id: %s" % (inner_ip,
                                                                                outer_ip,
                                                                                router_id,
                                                                                segment_id))
             
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
-                print("router not found for rule, deleting")
+                LOG.info("router not found for rule, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
 
             # Check that router has external network and segment_id matches
             router = router_id_dict[router_id]
             if "gw_port" not in router:
-                print("router has no gw_port, snat is invalid, deleting")
+                LOG.info("router has no gw_port, snat is invalid, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
             
             gw_port = router['gw_port']
             gw_segment_id = gw_port['hosting_info']['segmentation_id']
             if segment_id != gw_segment_id:
-                print("snat segment_id does not match router's gw segment_id, deleting")
+                LOG.info("snat segment_id does not match router's gw segment_id, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
             
             # Check that in,out ip pair matches a floating_ip defined on router
             if '_floatingips' not in router:
-                print("Router has no floating IPs defined, snat rule is invalid, deleting")
+                LOG.info("Router has no floating IPs defined, snat rule is invalid, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
 
@@ -230,7 +228,7 @@ class ConfigSyncer(object):
                     fip_match_found = True
                     break
             if fip_match_found is False:
-                print("snat rule does not match defined floating IPs, deleting")
+                LOG.info("snat rule does not match defined floating IPs, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
         
@@ -244,7 +242,7 @@ class ConfigSyncer(object):
         delete_nat_list = []
         nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
         for nat_rule in nat_overloads:
-            print("\nnat overload rule: %s" % (nat_rule))
+            LOG.info("\nnat overload rule: %s" % (nat_rule))
             match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
             segment_id, intf_num, intf_segment_id, router_id = match_obj.group(1,2,3,4)
             
@@ -253,20 +251,20 @@ class ConfigSyncer(object):
             intf_segment_id = int(intf_segment_id)
 
             if segment_id != intf_segment_id:
-                print("Interface segment and ACL segment mismatch, deleting rule")
+                LOG.info("Interface segment and ACL segment mismatch, deleting rule")
                 delete_nat_list.append(nat_rule.text)
                 continue
 
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
-                print("router not found for rule, deleting")
+                LOG.info("router not found for rule, deleting")
                 delete_nat_list.append(nat_rule.text)
                 continue
 
             # Check that router has external network
             router = router_id_dict[router_id]
             if "gw_port" not in router:
-                print("router has no gw_port, nat overload is invalid, deleting")
+                LOG.info("router has no gw_port, nat overload is invalid, deleting")
                 delete_nat_list.append(nat_rule.text)
                 continue
 
@@ -279,7 +277,7 @@ class ConfigSyncer(object):
                         intf_match_found = True
                         break
             if intf_match_found is False:
-                print("router does not have this internal network assigned, deleting rule")
+                LOG.info("router does not have this internal network assigned, deleting rule")
                 delete_nat_list.append(nat_rule.text)
                 continue
             
@@ -292,7 +290,7 @@ class ConfigSyncer(object):
     def check_acl_permit_rules_valid(self, segment_id, acl, intf_segment_dict):
         permit_rules = acl.re_search_children(ACL_CHILD_REGEX)
         for permit_rule in permit_rules:
-            print("   permit rule: %s" % (permit_rule))
+            LOG.info("   permit rule: %s" % (permit_rule))
             match_obj = re.match(ACL_CHILD_REGEX, permit_rule.text)
             net_ip, hostmask = match_obj.group(1,2)
             
@@ -306,13 +304,13 @@ class ConfigSyncer(object):
                     db_subnet = netaddr.IPNetwork(subnet_cidr)
                     break
 
-            print("   cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
+            LOG.info("   cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
                                                            cfg_subnet.prefixlen,
                                                            db_subnet.network,
                                                            db_subnet.prefixlen))
             if cfg_subnet.network != db_subnet.network or \
                cfg_subnet.prefixlen != db_subnet.prefixlen:
-                print("ACL subnet does not match subnet info in openstack DB, deleting ACL")
+                LOG.info("ACL subnet does not match subnet info in openstack DB, deleting ACL")
                 return False
         
         return True
@@ -321,15 +319,15 @@ class ConfigSyncer(object):
         delete_acl_list = []
         acls = parsed_cfg.find_objects(ACL_REGEX)
         for acl in acls:
-            print("\nacl: %s" % (acl))
+            LOG.info("\nacl: %s" % (acl))
             match_obj = re.match(ACL_REGEX, acl.text)
             segment_id = match_obj.group(1)
             segment_id = int(segment_id)
-            print("   segment_id: %s" % (segment_id))
+            LOG.info("   segment_id: %s" % (segment_id))
             
             # Check that segment_id exists in openstack DB info
             if segment_id not in intf_segment_dict:
-                print("Segment ID not found, deleting acl")
+                LOG.info("Segment ID not found, deleting acl")
                 delete_acl_list.append(acl.text)
 
             # Check that permit rules match subnets defined on openstack intfs
@@ -348,15 +346,15 @@ class ConfigSyncer(object):
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children("description OPENSTACK_NEUTRON_INTF")]
 
-        print("intf_segment_dict: %s" % (intf_segment_dict))
+        LOG.info("intf_segment_dict: %s" % (intf_segment_dict))
         pending_delete_list = []
 
         # TODO: split this big function into smaller functions
         for intf in runcfg_intfs:
-            print("\nOpenstack interface: %s" % (intf))
+            LOG.info("\nOpenstack interface: %s" % (intf))
             intf.intf_num = int(intf.re_match(INTF_REGEX, group=1))
             intf.segment_id = int(intf.re_match(INTF_REGEX, group=2))
-            print("  num: %s  segment_id: %s" % (intf.intf_num, intf.segment_id))
+            LOG.info("  num: %s  segment_id: %s" % (intf.intf_num, intf.segment_id))
 
             # Delete any interfaces where config doesn't match DB
             # Correct config will be added after clearing invalid cfg
@@ -366,7 +364,7 @@ class ConfigSyncer(object):
 
             # Check that the interface segment_id exists in the current DB data
             if intf.segment_id not in intf_segment_dict:
-                print("Invalid segment ID, delete interface")
+                LOG.info("Invalid segment ID, delete interface")
                 pending_delete_list.append(intf)
                 continue
 
@@ -375,13 +373,13 @@ class ConfigSyncer(object):
             dot1q_cfg = self.get_single_cfg(dot1q_cfg)
 
             if dot1q_cfg is None:
-                print("Missing DOT1Q config, delete interface")
+                LOG.info("Missing DOT1Q config, delete interface")
                 pending_delete_list.append(intf)
                 continue
             else:
                 dot1q_num = int(dot1q_cfg.re_match(DOT1Q_REGEX, group=1))
                 if dot1q_num != intf.segment_id:
-                    print("DOT1Q mismatch, delete interface")
+                    LOG.info("DOT1Q mismatch, delete interface")
                     pending_delete_list.append(intf)
                     continue
 
@@ -395,24 +393,24 @@ class ConfigSyncer(object):
             if intf.is_external:
                 vrf_cfg = intf.re_search_children(VRF_EXT_INTF_REGEX)
                 vrf_cfg = self.get_single_cfg(vrf_cfg)
-                print("VRF: %s" % (vrf_cfg))
+                LOG.info("VRF: %s" % (vrf_cfg))
                 if vrf_cfg is not None: # external network has no vrf
-                    print("External network shouldn't have VRF, deleting intf")
+                    LOG.info("External network shouldn't have VRF, deleting intf")
                     pending_delete_list.append(intf)
                     continue
             else:
                 vrf_cfg = intf.re_search_children(VRF_INTF_REGEX)
                 vrf_cfg = self.get_single_cfg(vrf_cfg)
-                print("VRF: %s" % (vrf_cfg))
+                LOG.info("VRF: %s" % (vrf_cfg))
                 if not vrf_cfg:
-                    print("Internal network missing valid VRF, deleting intf")
+                    LOG.info("Internal network missing valid VRF, deleting intf")
                     pending_delete_list.append(intf)
                     continue
                 
                 # check for VRF mismatch
                 router_id = vrf_cfg.re_match(VRF_INTF_REGEX, group=1)
                 if router_id != db_intf["device_id"][0:6]:
-                    print("Internal network VRF mismatch, deleting intf")
+                    LOG.info("Internal network VRF mismatch, deleting intf")
                     pending_delete_list.append(intf)
                     continue
 
@@ -425,7 +423,7 @@ class ConfigSyncer(object):
             if intf_nat_type is not None:
                 intf_nat_type = intf_nat_type.re_match(INTF_NAT_REGEX, group=1)
             
-            print("NAT Type: %s" % intf_nat_type)
+            LOG.info("NAT Type: %s" % intf_nat_type)
 
             if segment_nat_dict[intf.segment_id] == True:
                 if intf.is_external:
@@ -433,21 +431,21 @@ class ConfigSyncer(object):
                         nat_cmd = XML_CMD_TAG % (intf.text)
                         nat_cmd += XML_CMD_TAG % ("ip nat outside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                        print("NAT type mismatch, should be outside")
+                        LOG.info("NAT type mismatch, should be outside")
                         rpc_obj = conn.edit_config(target='running', config=confstr)
                 else:
                     if intf_nat_type != "inside":
                         nat_cmd = XML_CMD_TAG % (intf.text)
                         nat_cmd += XML_CMD_TAG % ("ip nat inside")
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                        print("NAT type mismatch, should be inside")
+                        LOG.info("NAT type mismatch, should be inside")
                         rpc_obj = conn.edit_config(target='running', config=confstr)
             else:
                 if intf_nat_type is not None:
                     nat_cmd = XML_CMD_TAG % (intf.text)
                     nat_cmd += XML_CMD_TAG % ("no ip nat %s" % (intf_nat_type))
                     confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                    print("NAT type mismatch, should have no NAT")
+                    LOG.info("NAT type mismatch, should have no NAT")
                     rpc_obj = conn.edit_config(target='running', config=confstr)
 
             
@@ -463,14 +461,14 @@ class ConfigSyncer(object):
             
             if needs_hsrp_delete:
                 confstr = XML_FREEFORM_SNIPPET % (del_hsrp_cmd)
-                print("Deleting bad HSRP config: %s" % (confstr))
+                LOG.info("Deleting bad HSRP config: %s" % (confstr))
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 
         for intf in pending_delete_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (intf.text))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
-            print("Deleting %s" % (intf.text))
-            print(confstr)
+            LOG.info("Deleting %s" % (intf.text))
+            LOG.info(confstr)
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
 

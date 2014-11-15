@@ -35,6 +35,7 @@ from neutron.openstack.common.rpc import proxy  # ICEHOUSE_BACKPORT
 from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1kv_driver)
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import asr1k_cfg_syncer
 
 
 
@@ -680,6 +681,12 @@ class PhyRouterContext(RoutingServiceHelper):
         self._dev_status = dev_status
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
 
+    def delete_invalid_cfg(router_db_info):
+        if router_db_info is None:
+            router_db_info = self._fetch_router_info(all_routers=True)
+        driver = self._drivermgr.get_driver(None)
+        driver.delete_invalid_cfg(router_db_info)
+
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
             LOG.debug("Routing service processing started")
@@ -696,6 +703,8 @@ class PhyRouterContext(RoutingServiceHelper):
                 self.removed_routers.clear()
                 self.sync_devices.clear()
                 routers = self._fetch_router_info(all_routers=True)
+                self.delete_invalid_cfg(routers)
+
             else:
                 if self.updated_routers:
                     router_ids = list(self.updated_routers)

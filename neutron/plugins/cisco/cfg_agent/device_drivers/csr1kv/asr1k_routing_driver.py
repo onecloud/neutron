@@ -138,10 +138,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
 
-
-        
+    def delete_invalid_cfg(self, router_db_info):
+        asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
+        cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info)
+        cfg_syncer.delete_invalid_cfg(asr_ent['conn'])
     
-
 
     ###### Internal "Preparation" Functions ########
 
