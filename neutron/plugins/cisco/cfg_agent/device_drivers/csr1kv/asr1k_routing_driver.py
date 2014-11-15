@@ -140,8 +140,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def delete_invalid_cfg(self, router_db_info):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
+        conn = self._get_connection(asr_ent)
         cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info)
-        cfg_syncer.delete_invalid_cfg(asr_ent['conn'])
+        cfg_syncer.delete_invalid_cfg(conn)
     
 
     ###### Internal "Preparation" Functions ########
