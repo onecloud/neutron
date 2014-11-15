@@ -31,7 +31,7 @@ class ConfigSyncer(object):
     def __init__(self, router_db_info):
         router_id_dict, interface_segment_dict, segment_nat_dict = self.process_routers_data(router_db_info)
         self.router_id_dict = router_id_dict
-        self.interface_segment_dict = interface_segment_dict
+        self.intf_segment_dict = interface_segment_dict
         self.segment_nat_dict = segment_nat_dict
 
     def process_routers_data(self, routers):
