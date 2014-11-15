@@ -920,6 +920,11 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
         LOG.debug('Got router added to agent :%r', payload)
         self.routers_updated(context, payload)
 
+    ### General Notifications  ####
+    def resync_asrs(self):
+        for asr_name, asr_ctx in self._asr_contexts.iteritems():
+            asr_ctx.fullsync = True
+
     # Routing service helper public methods
 
     def process_service(self, device_ids=None, removed_devices_info=None):
