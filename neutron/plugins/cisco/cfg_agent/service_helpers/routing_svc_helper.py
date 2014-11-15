@@ -706,6 +706,7 @@ class PhyRouterContext(RoutingServiceHelper):
                 self.sync_devices.clear()
                 routers = self._fetch_router_info(all_routers=True)
                 self.delete_invalid_cfg(routers)
+                self.router_info = {}
 
             else:
                 if self.updated_routers:
