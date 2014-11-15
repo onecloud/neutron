@@ -680,6 +680,8 @@ class PhyRouterContext(RoutingServiceHelper):
         self.context = context
         self._dev_status = dev_status
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
+        self._drivermgr.set_driver(None)
+
 
     def delete_invalid_cfg(self, router_db_info):
         if router_db_info is None:
