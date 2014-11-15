@@ -921,7 +921,7 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
         self.routers_updated(context, payload)
 
     ### General Notifications  ####
-    def resync_asrs(self):
+    def resync_asrs(self, context):
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.fullsync = True
 

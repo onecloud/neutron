@@ -33,7 +33,7 @@ def rpc_tester_main():
     conf(project='neutron')
 
     rpc_tester = TestRPCNotifier()
-    rpc_tester.test_cast("routers_updated")
+    rpc_tester.test_cast("resync_asrs")
 
 if __name__ == "__main__":
     rpc_tester_main()
