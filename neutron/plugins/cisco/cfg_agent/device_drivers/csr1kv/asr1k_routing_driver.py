@@ -95,7 +95,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         return
 
     def _get_asr_list(self):
-        asr_ent = self.get_asr_by_name(self.target_asr['name'])
+        asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
         return [asr_ent]
         #return self._asr_config.get_asr_list()
 
