@@ -783,12 +783,14 @@ class PhyRouterContext(RoutingServiceHelper):
                     self._process_router(ri)
                 except KeyError as e:
                     LOG.exception(_("Key Error, missing key: %s"), e)
-                    self.updated_routers.update([r['id']]) # make sure the ID is in a list
+                    self.updated_routers.update([r['id']]) # make sure the ID is in a list (for set.update)
+                    self.fullsync = True
                     continue
                 except cfg_exceptions.DriverException as e:
                     LOG.exception(_("Driver Exception on router:%(id)s. "
                                     "Error is %(e)s"), {'id': r['id'], 'e': e})
                     self.updated_routers.update([r['id']])
+                    self.fullsync = True # TODO: Do fullsync on error to be safe for now, can optimize later
                     continue
             # identify and remove routers that no longer exist
             for router_id in prev_router_ids - cur_router_ids:
@@ -927,7 +929,6 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
             asr_ctx.fullsync = True
 
     # Routing service helper public methods
-
     def process_service(self, device_ids=None, removed_devices_info=None):
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.process_service(device_ids, removed_devices_info)
