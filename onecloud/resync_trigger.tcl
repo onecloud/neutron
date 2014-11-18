@@ -1,5 +1,13 @@
 ::cisco::eem::event_register_syslog occurs 1 pattern $_syslog_pattern maxrun 90
 #------------------------------------------------------------------
+# USAGE:
+#  
+#  copy .tcl file to flash:
+#  using HSRP statechange syslog as example:
+#   event manager environment _syslog_pattern .*STATECHANGE.*Port-channel.*
+#   event manager directory user policy "flash:/"
+#   event manager policy test.tcl type user
+#
 # EEM policy to monitor for a specified syslog message.
 # Designed to be used for syslog interface-down messages.  
 # When event is triggered, the given config commands will be run.
