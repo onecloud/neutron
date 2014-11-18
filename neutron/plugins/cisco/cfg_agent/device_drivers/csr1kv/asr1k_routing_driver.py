@@ -133,7 +133,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def external_gateway_added(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        virtual_gw_port = ri['gw_port']
+        virtual_gw_port = ri.router['gw_port']
         subintf_ip = virtual_gw_port['fixed_ips'][0]['ip_address']
         self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
         if ex_gw_ip:

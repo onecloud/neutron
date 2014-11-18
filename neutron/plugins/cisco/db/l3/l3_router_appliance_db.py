@@ -920,7 +920,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 
                 raise n_exc.BadRequest(resource='router', msg=msg)
 
-        self._bind_hsrp_interfaces_to_router(context, router['id'],  port_list[1:])
+        self._bind_hsrp_interfaces_to_router(context, router['id'],  existing_port_list[1:])
 
     def _create_phy_router_gw_port(self, context, router, network_id):
         # Port has no 'tenant-id', as it is hidden from user
@@ -943,7 +943,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             raise n_exc.BadRequest(resource='router', msg=msg)
 
         with context.session.begin(subtransactions=True):
-            phy_router = self.get_router(context, PHYSICAL_GLOBAL_ROUTER_ID)
+            phy_router = self._get_router(context, PHYSICAL_GLOBAL_ROUTER_ID) #db object, not dict
             phy_router.gw_port = self._core_plugin._get_port(context.elevated(),
                                                              gw_port['id'])
             context.session.add(phy_router)
