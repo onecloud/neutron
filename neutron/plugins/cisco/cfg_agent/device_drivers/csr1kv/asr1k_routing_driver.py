@@ -133,10 +133,19 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def external_gateway_added(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        self._csr_create_subinterface(ri, ex_gw_port, True, ex_gw_ip)
+        subintf_ip = ex_gw_port['fixed_ips'][0]['ip_address']
+        self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
         if ex_gw_ip:
             # Set default route via this network's gateway ip
-            self._csr_add_default_route(ri, ex_gw_ip)
+            self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
+
+    def external_gateway_removed(self, ri, ex_gw_port):
+        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+        if ex_gw_ip:
+            #Remove default route via this network's gateway ip
+            self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
+        #Finally, remove external network subinterface
+        self._csr_remove_subinterface(ex_gw_port)
 
     def delete_invalid_cfg(self, router_db_info):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
@@ -233,18 +242,17 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 self._remove_dyn_nat_rule(acl, in_intfc_name, vrf_name, asr_ent)
 
 
-    def _csr_add_default_route(self, ri, gw_ip):
-        return # disable for now until next_hop issue resolved
-        vrf_name = self._csr_get_vrf_name(ri)
-
-        for asr_ent in self._get_asr_list():
-            self._add_default_static_route(gw_ip, vrf_name, asr_ent)
-
-    def _csr_remove_default_route(self, ri, gw_ip):
-        return # disable for now
+    def _csr_add_default_route(self, ri, gw_ip, gw_port):
         vrf_name = self._csr_get_vrf_name(ri)
         for asr_ent in self._get_asr_list():
-            self._remove_default_static_route(gw_ip, vrf_name, asr_ent)
+            subinterface = self._get_interface_name_from_hosting_port(gw_port, asr_ent)
+            self._add_default_static_route(gw_ip, vrf_name, asr_ent, subinterface)
+
+    def _csr_remove_default_route(self, ri, gw_ip, gw_port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        for asr_ent in self._get_asr_list():
+            subinterface = self._get_interface_name_from_hosting_port(gw_port, asr_ent)
+            self._remove_default_static_route(gw_ip, vrf_name, asr_ent, subinterface)
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
 
@@ -441,21 +449,21 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, 'REMOVE_IP_ROUTE')
 
-    def _add_default_static_route(self, gw_ip, vrf, asr_ent):
+    def _add_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
-        confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
+        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, gw_ip, out_intf)
         if not self._cfg_exists(confstr, asr_ent):
-            confstr = snippets.SET_DEFAULT_ROUTE % (vrf, gw_ip)
+            confstr = snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, gw_ip, out_intf)
             rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE')
+            self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE_WITH_INTF')
 
-    def _remove_default_static_route(self, gw_ip, vrf, asr_ent):
+    def _remove_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
-        confstr = snippets.DEFAULT_ROUTE_CFG % (vrf, gw_ip)
+        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, gw_ip, out_intf)
         if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
-            confstr = snippets.REMOVE_DEFAULT_ROUTE % (vrf, gw_ip)
+            confstr = snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, gw_ip, out_intf)
             rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE')
+            self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE_WITH_INTF')
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent, is_external=False):
         if vrf_name not in self._get_vrfs(asr_ent):

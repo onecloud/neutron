@@ -431,6 +431,35 @@ REMOVE_DEFAULT_ROUTE = """
 """
 
 #=============================================================================#
+# Set default ip route with interface
+# Syntax: ip route vrf <vrf-name> 0.0.0.0 0.0.0.0 <interface> <next hop>
+# eg: $(config)ip route vrf nrouter-e7d4y5 0.0.0.0  0.0.0.0 po10.304 10.0.100.255
+#=============================================================================#
+DEFAULT_ROUTE_WITH_INTF_CFG = 'ip route vrf %s 0.0.0.0 0.0.0.0 %s %s'
+
+SET_DEFAULT_ROUTE_WITH_INTF = """
+<config>
+        <cli-config-data>
+            <cmd>ip route vrf %s 0.0.0.0 0.0.0.0 %s %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=============================================================================#
+# Remove default ip route
+# Syntax: ip route vrf <vrf-name> 0.0.0.0 0.0.0.0 <interface> <next hop>
+# eg: $(config)ip route vrf nrouter-e7d4y5 0.0.0.0 0.0.0.0 po10.304 10.0.100.255
+#=============================================================================#
+REMOVE_DEFAULT_ROUTE_WITH_INTF = """
+<config>
+        <cli-config-data>
+            <cmd>no ip route vrf %s 0.0.0.0 0.0.0.0 %s %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+
+#=============================================================================#
 # Clear dynamic nat translations. This is used to clear any nat bindings before
 # we can turn off NAT on an interface
 # Syntax: clear ip nat translation [forced]
