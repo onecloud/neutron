@@ -451,17 +451,17 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _add_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
-        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, gw_ip, out_intf)
+        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, out_intf, gw_ip)
         if not self._cfg_exists(confstr, asr_ent):
-            confstr = snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, gw_ip, out_intf)
+            confstr = snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE_WITH_INTF')
 
     def _remove_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
-        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, gw_ip, out_intf)
+        confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, out_intf, gw_ip)
         if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
-            confstr = snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, gw_ip, out_intf)
+            confstr = snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE_WITH_INTF')
 
