@@ -891,10 +891,9 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     They will be deleted when an external network is no longer assigned to any
     virtual router.
     '''    
-    def _create_router_gw_hsrp_interfaces(self, context, router, network_id, main_gw_port):
+    def _create_router_gw_hsrp_interfaces(self, context, router, network_id, existing_port_list):
         # Port has no 'tenant-id', as it is hidden from user
 
-        port_list = [main_gw_port]
         num_asr = len(self.asr_cfg_info.get_asr_list())
         for asr_idx in range(0, num_asr):
 
@@ -910,10 +909,10 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                      'admin_state_up': True,
                      'name': ''}})
 
-            port_list.append(gw_port)
+            existing_port_list.append(gw_port)
             
             if not gw_port['fixed_ips']:
-                for deleted_port in port_list:
+                for deleted_port in existing_port_list:
                     self._core_plugin.delete_port(context.elevated(), deleted_port['id'],
                                                   l3_port_check=False)
                     msg = (_('Not enough IPs available for external network %s') %
@@ -923,7 +922,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
         self._bind_hsrp_interfaces_to_router(context, router['id'],  port_list[1:])
 
-    def _create_router_gw_port(self, context, router, network_id):
+    def _create_phy_router_gw_port(self, context, router, network_id):
         # Port has no 'tenant-id', as it is hidden from user
         gw_port = self._core_plugin.create_port(context.elevated(), {
             'port': {'tenant_id': '',  # intentionally not set
@@ -1002,14 +1001,16 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                                                   network_id, subnet['id'],
                                                   subnet['cidr'])
 
-            # Only create ports if we are the first to create VLAN subinterface for this ext network
+            # Only create HA ports if we are the first to create VLAN subinterface for this ext network
             needs_hsrp_create = False
             if self._count_ha_routers_on_network(context, network_id) == 0:
                 needs_hsrp_create = True
+            
+            self._create_router_gw_port(context, router, network_id) 
 
             if needs_hsrp_create is True:
-                self._create_router_gw_port(context, router, network_id)
-                self._create_router_gw_hsrp_interfaces(context, router, network_id, router.gw_port)
+                self._create_phy_router_gw_port(context, router, network_id)
+                self._create_router_gw_hsrp_interfaces(context, router, network_id, [router.gw_port])
                 self._send_physical_global_router_updated_notification(context)
 
 
