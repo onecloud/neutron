@@ -681,7 +681,7 @@ class PhyRouterContext(RoutingServiceHelper):
         self._dev_status = dev_status
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
         self._drivermgr.set_driver(None)
-        driver = self._drivermgr.get_driver()
+        driver = self._drivermgr.get_driver(None)
         driver.set_err_listener_context(self)
 
     def connection_err_callback(self, ex):
