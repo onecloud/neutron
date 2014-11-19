@@ -648,7 +648,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._intfs_enabled = True
                 
                 if self._err_listener is not None:
-                    asr_conn.add_listener(self._err_listener)
+                    asr_conn._session.add_listener(self._err_listener)
                 asr_ent['conn'] = asr_conn
 
             return asr_conn
