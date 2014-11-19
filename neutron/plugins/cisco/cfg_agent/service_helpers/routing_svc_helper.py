@@ -681,7 +681,12 @@ class PhyRouterContext(RoutingServiceHelper):
         self._dev_status = dev_status
         self._drivermgr = driver_mgr.PhysicalDeviceDriverManager(asr_ent)
         self._drivermgr.set_driver(None)
+        driver = self._drivermgr.get_driver()
+        driver.set_err_listener_context(self)
 
+    def connection_err_callback(self, ex):
+        LOG.exception("NetConf connection exception: %s" % (ex))
+        self.fullsync = True
 
     def delete_invalid_cfg(self, router_db_info):
         if router_db_info is None:

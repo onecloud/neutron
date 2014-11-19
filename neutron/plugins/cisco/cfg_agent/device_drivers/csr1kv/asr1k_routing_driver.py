@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 
 import ciscoconfparse
 from ncclient import manager
+from ncclient import transport as nctransport
 
 from oslo.config import cfg
 
@@ -82,6 +83,19 @@ class ASR1kConfigInfo(object):
         return self.asr_list
 
 
+class NetConfErrorListener(nctransport.SessionListener):       
+    
+    def set_phy_context(self, phy_context):
+        self._phy_context = phy_context
+
+    def callback(self, root, raw):
+        pass
+
+    def err(self, ex):
+        if self._phy_context:
+            self._phy_context.connection_err_callback(ex)
+        
+
 class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def __init__(self, target_asr):
@@ -92,6 +106,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self.hsrp_group_base = 200
         self.hsrp_real_ip_base = 200
         self.target_asr = target_asr
+        self._err_listener = None
         return
 
     def _get_asr_list(self):
@@ -123,6 +138,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
 
     ###### Public Functions ########
+    def set_err_listener_context(self, phy_context):
+        self._err_listener = NetConfErrorListener()
+        self._err_listener.set_phy_context(phy_context)
 
     def set_ignore_cfg_check(self, is_set):
         self._ignore_cfg_check = is_set
@@ -629,6 +647,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     #self._intfs_enabled = self._enable_intfs(self._csr_conn)
                     self._intfs_enabled = True
                 
+                if self._err_listener is not None:
+                    asr_conn.add_listener(self._err_listener)
                 asr_ent['conn'] = asr_conn
 
             return asr_conn
