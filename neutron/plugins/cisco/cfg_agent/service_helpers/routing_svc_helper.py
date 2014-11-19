@@ -735,10 +735,11 @@ class PhyRouterContext(RoutingServiceHelper):
                 resources['removed_routers'] = removed_routers
 
             # Dispatch process_services() for each hosting device
-            pool = eventlet.GreenPool()
-            pool.spawn_n(self._process_routers, routers, removed_routers,
-                         0, all_routers=all_routers_flag)
-            pool.waitall()
+            #pool = eventlet.GreenPool()
+            #pool.spawn_n(self._process_routers, routers, removed_routers,
+            #             0, all_routers=all_routers_flag)
+            #pool.waitall()
+            self._process_routers(routers, removed_routers, 0, all_routers=all_routers_flag)
                 
         except Exception:
             LOG.exception(_("Failed processing routers"))
@@ -937,8 +938,10 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
 
     # Routing service helper public methods
     def process_service(self, device_ids=None, removed_devices_info=None):
+        pool = eventlet.GreenPool()
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
-            asr_ctx.process_service(device_ids, removed_devices_info)
+            pool.spawn_n(asr_ctx.process_service, device_ids, removed_devices_info)
+        pool.waitall()
 
     def collect_state(self, configurations):
         if len(self._asr_contexts) < 1:
