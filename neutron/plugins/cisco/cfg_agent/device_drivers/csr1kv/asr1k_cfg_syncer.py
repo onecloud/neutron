@@ -250,11 +250,6 @@ class ConfigSyncer(object):
             intf_num = int(intf_num)
             intf_segment_id = int(intf_segment_id)
 
-            if segment_id != intf_segment_id:
-                LOG.info("Interface segment and ACL segment mismatch, deleting rule")
-                delete_nat_list.append(nat_rule.text)
-                continue
-
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
                 LOG.info("router not found for rule, deleting")
@@ -265,6 +260,14 @@ class ConfigSyncer(object):
             router = router_id_dict[router_id]
             if "gw_port" not in router:
                 LOG.info("router has no gw_port, nat overload is invalid, deleting")
+                delete_nat_list.append(nat_rule.text)
+                continue
+
+            # Check that external network interface segment_id matches
+            gw_port = router['gw_port']
+            ext_intf_segment_id = gw_port['hosting_info']['segmentation_id']
+            if ext_intf_segment_id != intf_segment_id:
+                LOG.info("outbound external interface segment_id is wrong, deleting rule")
                 delete_nat_list.append(nat_rule.text)
                 continue
 

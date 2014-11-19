@@ -986,9 +986,11 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                                           l3_port_check=False)
 
             # No external gateway assignments left, clear the HSRP interfaces
-            if self._count_ha_routers_on_network(context, gw_port['network_id']) == 0:
+            if self._count_ha_routers_on_network(context, gw_port['network_id']) == 1:
                 self._delete_hsrp_interfaces(context.elevated(), None, subnet,
                                              l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                self._delete_hsrp_interfaces(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID, subnet,
+                                             l3_constants.DEVICE_OWNER_ROUTER_GW)
                 self._send_physical_global_router_updated_notification(context)
 
 
