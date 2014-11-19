@@ -22,6 +22,8 @@ SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (
 NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf nrouter-(\w+) overload"
 ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+DEFAULT_ROUTE_REGEX = "ip route vrf nrouter-(\w{6,6}) 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
@@ -117,6 +119,7 @@ class ConfigSyncer(object):
         self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_snat(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_nat_overload(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
 
     def get_running_config(self, conn):
@@ -182,6 +185,54 @@ class ConfigSyncer(object):
         else:
             return cfg_line[0]
 
+    def clean_default_route(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        delete_route_list = []
+        default_routes = parsed_cfg.find_objects(DEFAULT_ROUTE_REGEX)
+        for route in default_routes:
+            LOG.info("\ndefault route: %s" % (route))
+            match_obj = re.match(DEFAULT_ROUTE_REGEX, route.text)
+            router_id, intf_num, segment_id, next_hop = match_obj.group(1,2,3,4)
+            segment_id = int(segment_id)
+            intf_num = int(intf_num)
+            LOG.info("    router_id: %s, intf_num: %s, segment_id: %s, next_hop: %s" % (router_id,
+                                                                                        intf_num,
+                                                                                        segment_id,
+                                                                                        next_hop))
+
+            # Check that VRF exists in openstack DB info
+            if router_id not in router_id_dict:
+                LOG.info("router not found for route, deleting")
+                delete_route_list.append(route.text)
+                continue
+
+            # Check that router has external network and segment_id matches
+            router = router_id_dict[router_id]
+            if "gw_port" not in router:
+                LOG.info("router has no gw_port, route is invalid, deleting")
+                delete_route_list.append(route.text)
+                continue
+            
+            gw_port = router['gw_port']
+            gw_segment_id = gw_port['hosting_info']['segmentation_id']
+            if segment_id != gw_segment_id:
+                LOG.info("route segment_id does not match router's gw segment_id, deleting")
+                delete_route_list.append(route.text)
+                continue
+
+            # Check that nexthop matches gw_ip of external network
+            gw_ip = gw_port['subnet']['gateway_ip']
+            if next_hop != gw_ip:
+                LOG.info("route has incorrect next-hop, deleting")
+                delete_route_list.append(route.text)
+                continue
+
+        for route_cfg in delete_route_list:
+            del_cmd = XML_CMD_TAG % ("no %s" % (route_cfg))
+            confstr = XML_FREEFORM_SNIPPET % (del_cmd)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+
+
+
     def clean_snat(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
         delete_fip_list = []
         floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
@@ -191,9 +242,9 @@ class ConfigSyncer(object):
             inner_ip, outer_ip, router_id, segment_id = match_obj.group(1,2,3,4)
             segment_id = int(segment_id)
             LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, segment_id: %s" % (inner_ip,
-                                                                               outer_ip,
-                                                                               router_id,
-                                                                               segment_id))
+                                                                                  outer_ip,
+                                                                                  router_id,
+                                                                                  segment_id))
             
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
