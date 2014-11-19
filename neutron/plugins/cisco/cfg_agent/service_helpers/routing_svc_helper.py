@@ -119,6 +119,18 @@ class CiscoRoutingPluginApi(proxy.RpcProxy):
                                        hosting_device_ids=hd_ids),
                          topic=self.topic)
 
+    def agent_heartbeat(self, context):
+        """Make a remote process call to check connectivity between
+           agent and neutron-server
+
+        :param context: session context
+        """
+        return self.call(context,
+                         self.make_msg('agent_heartbeat',
+                                       host=self.host),
+                         topic=self.topic,
+                         timeout=6)
+
     def create_rpc_dispatcher(self):
         return n_rpc.PluginRpcDispatcher([self])
 
@@ -938,6 +950,13 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
 
     # Routing service helper public methods
     def process_service(self, device_ids=None, removed_devices_info=None):
+        
+        try:
+            self.plugin_rpc.agent_heartbeat(self.context)
+        except n_rpc.common.Timeout:
+            LOG.exception("Server heartbeat timeout")
+            self.resync_asrs(self.context)
+
         pool = eventlet.GreenPool()
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             pool.spawn_n(asr_ctx.process_service, device_ids, removed_devices_info)
