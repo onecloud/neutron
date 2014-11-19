@@ -953,9 +953,10 @@ class RoutingServiceHelperWithPhyContext(RoutingServiceHelper):
         
         try:
             self.plugin_rpc.agent_heartbeat(self.context)
-        except n_rpc.common.Timeout:
+        except o_rpc.common.Timeout:
             LOG.exception("Server heartbeat timeout")
             self.resync_asrs(self.context)
+            return # don't try to configure ASRs, can't get latest DB info
 
         pool = eventlet.GreenPool()
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
