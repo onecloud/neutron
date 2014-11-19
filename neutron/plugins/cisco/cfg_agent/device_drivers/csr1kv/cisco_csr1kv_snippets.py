@@ -476,3 +476,13 @@ CLEAR_DYN_NAT_TRANS = """
         </cli-config-data>
 </config>
 """
+
+#=================================================#
+# Empty snippet (for polling netconf session status)
+#=================================================#
+EMPTY_SNIPPET = """
+<config>
+        <cli-config-data>
+        </cli-config-data>
+</config>
+"""

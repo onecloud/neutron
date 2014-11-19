@@ -171,6 +171,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         conn = self._get_connection(asr_ent)
         cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info)
         cfg_syncer.delete_invalid_cfg(conn)
+
+    def send_empty_cfg(self):
+        asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.EMPTY_SNIPPET
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, snippets.EMPTY_SNIPPET)
+        
     
 
     ###### Internal "Preparation" Functions ########
