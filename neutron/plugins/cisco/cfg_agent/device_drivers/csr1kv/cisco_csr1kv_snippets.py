@@ -483,6 +483,7 @@ CLEAR_DYN_NAT_TRANS = """
 EMPTY_SNIPPET = """
 <config>
         <cli-config-data>
+            <cmd>do cd</cmd>
         </cli-config-data>
 </config>
 """
