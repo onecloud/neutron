@@ -33,6 +33,8 @@ class ASR1kConfigInfo(object):
         self._asr_name_dict = {}
         self._db_synced = False
         self._create_asr_device_dictionary()
+        self.deployment_id = None
+        self.other_dep_ids = []
 
     def _create_asr_device_dictionary(self):
         """Create the ASR device cisco dictionary.
@@ -48,6 +50,17 @@ class ASR1kConfigInfo(object):
         asr_count = 0
         for parsed_file in multi_parser.parsed:
             for parsed_item in parsed_file.keys():
+                
+                if parsed_item == 'deployment_ids':
+                    for dev_key, value in parsed_file[parsed_item].items():
+                        if dev_key == 'mine':
+                            self.deployment_id = value
+                        if dev_key == 'others':
+                            other_dep_ids = value.partition(',')
+                            for dep_id in other_dep_ids:
+                                self.other_dep_ids.append(dep_id)                                
+                    continue
+
                 dev_id, sep, dev_ip = parsed_item.partition(':')
                 if dev_id.lower() == 'asr':
                     if dev_ip not in self.asr_dict:
@@ -64,7 +77,8 @@ class ASR1kConfigInfo(object):
 
                     self._asr_name_dict[asr_entry['name']] = asr_entry
 
-        LOG.error("ASR dict: %s" % self.asr_dict)
+        LOG.info("ASR dict: %s" % self.asr_dict)
+        LOG.info("Deployment IDs mine: %s others: %s" % (self.deployment_id, self.other_dep_ids))
 
     def get_asr_by_name(self, asr_name):
         if asr_name in self._asr_name_dict:
