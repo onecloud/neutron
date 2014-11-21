@@ -10,22 +10,27 @@ from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
-NROUTER_REGEX = "nrouter-(\w{6,6})-(\w{3,3})"
+DEP_ID_REGEX = "(\w{3,3})"
+NROUTER_REGEX = "nrouter-(\w{6,6})-" + DEP_ID_REGEX
 #NROUTER_REGEX = "nrouter-(\w{6,6})"
 
 VRF_REGEX = "ip vrf " + NROUTER_REGEX
-VRF_EXT_INTF_REGEX = "ip vrf forwarding .*"
-VRF_INTF_REGEX = "ip vrf forwarding " + NROUTER_REGEX
+
 INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
-INTF_DESC_REGEX = "description OPENSTACK_NEUTRON-(\w{3,3})_INTF"
-DOT1Q_REGEX = "encapsulation dot1Q (\d+)"
-INTF_NAT_REGEX = "ip nat (inside|outside)"
-HSRP_REGEX = "standby (\d+) .*"
+INTF_DESC_REGEX = "\s*description OPENSTACK_NEUTRON-" + DEP_ID_REGEX + "_INTF"
+VRF_EXT_INTF_REGEX = "\s*ip vrf forwarding .*"
+VRF_INTF_REGEX = "\s*ip vrf forwarding " + NROUTER_REGEX
+DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
+INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
+HSRP_REGEX = "\s*standby (\d+) .*"
+
 SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)"
-# IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf \w+ redundancy \w+"
+
 NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf " + NROUTER_REGEX + " overload"
-ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
+
+ACL_REGEX = "ip access-list standard neutron_acl_" + DEP_ID_REGEX + "_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
 DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 
@@ -416,9 +421,16 @@ class ConfigSyncer(object):
         for acl in acls:
             LOG.info("\nacl: %s" % (acl))
             match_obj = re.match(ACL_REGEX, acl.text)
-            segment_id = match_obj.group(1)
+            dep_id, segment_id = match_obj.group(1,2)
             segment_id = int(segment_id)
-            LOG.info("   segment_id: %s" % (segment_id))
+            LOG.info("   dep_id: %s segment_id: %s" % (dep_id, segment_id))
+
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    delete_acl_list.append(acl.text) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this ACL, don't touch
             
             # Check that segment_id exists in openstack DB info
             if segment_id not in intf_segment_dict:
@@ -514,7 +526,6 @@ class ConfigSyncer(object):
                     continue
                 
                 # check for VRF mismatch
-                router_id = vrf_cfg.re_match(VRF_INTF_REGEX, group=1)
                 match_obj = re.match(VRF_INTF_REGEX, vrf_cfg.text)
                 router_id, dep_id = match_obj.group(1,2)
                 if dep_id != self.dep_id:
