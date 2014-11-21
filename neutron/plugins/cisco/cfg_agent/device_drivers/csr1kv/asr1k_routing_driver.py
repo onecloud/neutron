@@ -55,10 +55,11 @@ class ASR1kConfigInfo(object):
                 if parsed_item == 'deployment_ids':
                     for dev_key, value in parsed_file[parsed_item].items():
                         if dev_key == 'mine':
-                            self.deployment_id = value[0]
+                            self.deployment_id = value[0].strip()
                         if dev_key == 'others':
-                            for dep_id in value:
-                                self.other_dep_ids.append(dep_id)                                
+                            dep_ids = value[0].split(",")
+                            for dep_id in dep_ids:
+                                self.other_dep_ids.append(dep_id.strip())
                     continue
 
                 dev_id, sep, dev_ip = parsed_item.partition(':')
