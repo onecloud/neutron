@@ -183,7 +183,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def delete_invalid_cfg(self, router_db_info):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
         conn = self._get_connection(asr_ent)
-        cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info)
+        cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info, 
+                                                   self._asr_config.deployment_id,
+                                                   self._asr_config.other_dep_ids)
         cfg_syncer.delete_invalid_cfg(conn)
 
     def send_empty_cfg(self):
@@ -351,6 +353,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         for asr_ent in self._get_asr_list():
             self._remove_vrf(vrf_name, asr_ent)
 
+    def _csr_get_vrf_name(self, ri):
+        name = ri.router_name()[:self.DEV_NAME_LEN]
+        name = "%s-%s" % (name, self._asr_config.deployment_id)
+        return name
+
     def _csr_add_ha_HSRP(self, ri, port, ip, is_external=False):
 
         if not self._port_needs_config(port):
@@ -374,11 +381,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if vrf_name not in self._get_vrfs(asr_ent):
             LOG.error(_("VRF %s not present"), vrf_name)
         if is_external is True:
-            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL % (subinterface, vlan_id,
-                                                               ip, mask)
+            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL_WITH_ID % (subinterface,
+                                                                       self._asr_config.deployment_id,
+                                                                       vlan_id, ip, mask)
         else:
-            confstr = snippets.CREATE_SUBINTERFACE % (subinterface, vlan_id,
-                                                      vrf_name, ip, mask)
+            confstr = snippets.CREATE_SUBINTERFACE_WITH_ID % (subinterface,
+                                                              self._asr_config.deployment_id,
+                                                              vlan_id, vrf_name, ip, mask)
             
         self._edit_running_config(confstr, 'CREATE_SUBINTERFACE', asr_ent)
 

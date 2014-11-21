@@ -10,19 +10,23 @@ from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
 
-VRF_REGEX = "ip vrf nrouter-(\w{6,6})"
+NROUTER_REGEX = "nrouter-(\w{6,6})-(\w{3,3})"
+#NROUTER_REGEX = "nrouter-(\w{6,6})"
+
+VRF_REGEX = "ip vrf " + NROUTER_REGEX
 VRF_EXT_INTF_REGEX = "ip vrf forwarding .*"
-VRF_INTF_REGEX = "ip vrf forwarding nrouter-(\w{6,6})"
+VRF_INTF_REGEX = "ip vrf forwarding " + NROUTER_REGEX
 INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
+INTF_DESC_REGEX = "description OPENSTACK_NEUTRON-(\w{3,3})_INTF"
 DOT1Q_REGEX = "encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "ip nat (inside|outside)"
 HSRP_REGEX = "standby (\d+) .*"
-SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf nrouter-(\w{6,6}) redundancy neutron-hsrp-grp-(\d+)"
+SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)"
 # IP_NAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf \w+ redundancy \w+"
-NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf nrouter-(\w+) overload"
+NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf " + NROUTER_REGEX + " overload"
 ACL_REGEX = "ip access-list standard neutron_acl_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
-DEFAULT_ROUTE_REGEX = "ip route vrf nrouter-(\w{6,6}) 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
@@ -30,11 +34,13 @@ XML_CMD_TAG = "<cmd>%s</cmd>"
 
 class ConfigSyncer(object):
 
-    def __init__(self, router_db_info):
+    def __init__(self, router_db_info, my_dep_id, other_dep_ids):
         router_id_dict, interface_segment_dict, segment_nat_dict = self.process_routers_data(router_db_info)
         self.router_id_dict = router_id_dict
         self.intf_segment_dict = interface_segment_dict
         self.segment_nat_dict = segment_nat_dict
+        self.dep_id = my_dep_id
+        self.other_dep_ids = other_dep_ids
 
     def process_routers_data(self, routers):
         router_id_dict = {}
@@ -143,20 +149,25 @@ class ConfigSyncer(object):
 
     def get_running_config_router_ids(self, parsed_cfg):
         rconf_ids = []
+        invalid_dep_id_list = []
 
         for parsed_obj in parsed_cfg.find_objects(VRF_REGEX):
             LOG.info("VRF object: %s" % (parsed_obj))
-            router_id = parsed_obj.re_match(VRF_REGEX)
-            LOG.info("    First 6 digits of router ID: %s\n" % (router_id))
-            rconf_ids.append(router_id)
+            match_obj = re.match(VRF_REGEX, parsed_obj.text)
+            router_id, dep_id = match_obj.group(1,2)
+            LOG.info("    First 6 digits of router ID: %s, dep_id: %s\n" % (router_id, dep_id))
+            if dep_id == self.dep_id:
+                rconf_ids.append(router_id)
+            elif dep_id not in self.other_dep_ids:
+                invalid_dep_id_list.append((router_id, dep_id))
 
-        return rconf_ids;
+        return rconf_ids, invalid_dep_id_list;
     
 
     def clean_vrfs(self, conn, router_id_dict, parsed_cfg):
         
         ostk_router_ids = self.get_ostk_router_ids(router_id_dict)
-        rconf_ids = self.get_running_config_router_ids(parsed_cfg)
+        rconf_ids, invalid_routers = self.get_running_config_router_ids(parsed_cfg)
         
         source_set = set(ostk_router_ids)
         dest_set = set(rconf_ids)
@@ -169,16 +180,21 @@ class ConfigSyncer(object):
         LOG.info("VRFs to add: %s" % (add_set))
         
         for router_id in del_set:
-            vrf_name = "nrouter-%s" % (router_id)
+            vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
+            confstr = snippets.REMOVE_VRF % vrf_name
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+
+        for router_id, dep_id in invalid_routers:
+            vrf_name = "nrouter-%s-%s" % (router_id, dep_id)
             confstr = snippets.REMOVE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             
         for router_id in add_set:
-            vrf_name = "nrouter-%s" % (router_id)
+            vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
             confstr = snippets.CREATE_VRF % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
-
+            
     def get_single_cfg(self, cfg_line):
         if len(cfg_line) != 1:
             return None
@@ -191,13 +207,21 @@ class ConfigSyncer(object):
         for route in default_routes:
             LOG.info("\ndefault route: %s" % (route))
             match_obj = re.match(DEFAULT_ROUTE_REGEX, route.text)
-            router_id, intf_num, segment_id, next_hop = match_obj.group(1,2,3,4)
+            router_id, dep_id, intf_num, segment_id, next_hop = match_obj.group(1,2,3,4,5)
             segment_id = int(segment_id)
             intf_num = int(intf_num)
             LOG.info("    router_id: %s, intf_num: %s, segment_id: %s, next_hop: %s" % (router_id,
                                                                                         intf_num,
                                                                                         segment_id,
                                                                                         next_hop))
+
+            # Check deployment_id
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    delete_route_list.append(route.text) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this route, don't touch
 
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
@@ -239,12 +263,21 @@ class ConfigSyncer(object):
         for snat_rule in floating_ip_nats:
             LOG.info("\nstatic nat rule: %s" % (snat_rule))
             match_obj = re.match(SNAT_REGEX, snat_rule.text)
-            inner_ip, outer_ip, router_id, segment_id = match_obj.group(1,2,3,4)
+            inner_ip, outer_ip, router_id, dep_id, segment_id = match_obj.group(1,2,3,4,5)
             segment_id = int(segment_id)
-            LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, segment_id: %s" % (inner_ip,
-                                                                                  outer_ip,
-                                                                                  router_id,
-                                                                                  segment_id))
+            LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, segment_id: %s" % (inner_ip,
+                                                                                              outer_ip,
+                                                                                              router_id,
+                                                                                              dep_id,
+                                                                                              segment_id))
+
+            # Check deployment_id
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    delete_fip_list.append(snat_rule.text) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this rule, don't touch
             
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
@@ -295,11 +328,19 @@ class ConfigSyncer(object):
         for nat_rule in nat_overloads:
             LOG.info("\nnat overload rule: %s" % (nat_rule))
             match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
-            segment_id, intf_num, intf_segment_id, router_id = match_obj.group(1,2,3,4)
+            segment_id, intf_num, intf_segment_id, router_id, dep_id = match_obj.group(1,2,3,4,5)
             
             segment_id = int(segment_id)
             intf_num = int(intf_num)
             intf_segment_id = int(intf_segment_id)
+            
+             # Check deployment_id
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    delete_nat_list.append(nat_rule.text) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this rule, don't touch
 
             # Check that VRF exists in openstack DB info
             if router_id not in router_id_dict:
@@ -398,7 +439,7 @@ class ConfigSyncer(object):
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
-                        if obj.re_search_children("description OPENSTACK_NEUTRON_INTF")]
+                        if obj.re_search_children(INTF_DESC_REGEX)]
 
         LOG.info("intf_segment_dict: %s" % (intf_segment_dict))
         pending_delete_list = []
@@ -415,6 +456,17 @@ class ConfigSyncer(object):
 
             # TODO: Check that interface name (e.g. Port-channel10) matches that
             #       specified in .ini file
+
+            # Check deployment_id
+            description = intf.re_search_children(INTF_DESC_REGEX)
+            description = self.get_single_cfg(description)
+            dep_id = description.re_match(INTF_DESC_REGEX, group=1)
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    pending_delete_list.append(intf) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this intf, don't touch
 
             # Check that the interface segment_id exists in the current DB data
             if intf.segment_id not in intf_segment_dict:
@@ -463,6 +515,12 @@ class ConfigSyncer(object):
                 
                 # check for VRF mismatch
                 router_id = vrf_cfg.re_match(VRF_INTF_REGEX, group=1)
+                match_obj = re.match(VRF_INTF_REGEX, vrf_cfg.text)
+                router_id, dep_id = match_obj.group(1,2)
+                if dep_id != self.dep_id:
+                    LOG.info("Deployment ID mismatch, deleting intf")
+                    pending_delete_list.append(intf)
+                    continue
                 if router_id != db_intf["device_id"][0:6]:
                     LOG.info("Internal network VRF mismatch, deleting intf")
                     pending_delete_list.append(intf)

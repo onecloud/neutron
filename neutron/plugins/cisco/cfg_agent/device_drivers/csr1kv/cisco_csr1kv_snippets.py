@@ -97,7 +97,26 @@ CREATE_SUBINTERFACE = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
-            <cmd>description OPENSTACK_NEUTRON_INTF</cmd>
+            <cmd>encapsulation dot1Q %s</cmd>
+            <cmd>ip vrf forwarding %s</cmd>
+            <cmd>ip address %s %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
+# Create Subinterface (with deployment_id)
+# $(config)interface GigabitEthernet 2.500
+# $(config)encapsulation dot1Q 500
+# $(config)vrf forwarding nrouter-abc-e7d4y5
+# $(config)ip address 192.168.0.1 255.255.255.0
+#=================================================#
+CREATE_SUBINTERFACE_WITH_ID = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>ip vrf forwarding %s</cmd>
             <cmd>ip address %s %s</cmd>
@@ -112,11 +131,11 @@ CREATE_SUBINTERFACE = """
 # $(config)encapsulation dot1Q 500
 # $(config)ip address 192.168.0.1 255.255.255.0
 #=================================================#
-CREATE_SUBINTERFACE_EXTERNAL = """
+CREATE_SUBINTERFACE_EXTERNAL_WITH_ID = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
-            <cmd>description OPENSTACK_NEUTRON_INTF</cmd>
+            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>ip address %s %s</cmd>
         </cli-config-data>
