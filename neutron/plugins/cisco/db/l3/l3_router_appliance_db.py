@@ -989,6 +989,12 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             if self._count_ha_routers_on_network(context, gw_port['network_id']) == 1:
                 self._delete_hsrp_interfaces(context.elevated(), None, subnet,
                                              l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+
+                # Clear gw_port from PHYSICAL_GLOBAL_ROUTER so it can be deleted
+                phy_router = self._get_router(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID)
+                phy_router.gw_port = None
+                context.session.add(phy_router)
+
                 self._delete_hsrp_interfaces(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID, subnet,
                                              l3_constants.DEVICE_OWNER_ROUTER_GW)
                 self._send_physical_global_router_updated_notification(context)
