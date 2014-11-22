@@ -436,6 +436,7 @@ class ConfigSyncer(object):
             if segment_id not in intf_segment_dict:
                 LOG.info("Segment ID not found, deleting acl")
                 delete_acl_list.append(acl.text)
+                continue
 
             # Check that permit rules match subnets defined on openstack intfs
             if self.check_acl_permit_rules_valid(segment_id, acl, intf_segment_dict) is False:
