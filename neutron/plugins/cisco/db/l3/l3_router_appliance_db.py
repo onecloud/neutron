@@ -707,8 +707,8 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
             # Delete missing ASRs from db
             for missing_asr in missing_db_asr_list:
-                # context.session.delete(missing_asr)
-                missing_asr.delete()
+                context.session.delete(missing_asr)
+                # missing_asr.delete()
         
         self._db_synced = True
 
