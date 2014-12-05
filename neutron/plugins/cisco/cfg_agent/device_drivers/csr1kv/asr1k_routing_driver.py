@@ -169,13 +169,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         virtual_gw_port = ri.router['gw_port']
         subintf_ip = virtual_gw_port['fixed_ips'][0]['ip_address']
         self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
-        if ex_gw_ip:
+        if ex_gw_ip and self._port_needs_config(ex_gw_port):
             # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
 
     def external_gateway_removed(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        if ex_gw_ip:
+        if ex_gw_ip and self._port_needs_config(ex_gw_port):
             #Remove default route via this network's gateway ip
             self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
         #Finally, remove external network subinterface

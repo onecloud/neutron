@@ -397,12 +397,16 @@ class ConfigSyncer(object):
             cfg_subnet = netaddr.IPNetwork("%s/%s" % (net_ip, hostmask))
             
             db_subnet = netaddr.IPNetwork("255.255.255.255/32") # dummy value
-            intf_list = intf_segment_dict[segment_id]
-            for intf in intf_list:
-                if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
-                    subnet_cidr = intf['subnet']['cidr']
-                    db_subnet = netaddr.IPNetwork(subnet_cidr)
-                    break
+            try:
+                intf_list = intf_segment_dict[segment_id]
+                for intf in intf_list:
+                    if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
+                        subnet_cidr = intf['subnet']['cidr']
+                        db_subnet = netaddr.IPNetwork(subnet_cidr)
+                        break
+            except KeyError:
+                LOG.info("KeyError when attemping to validate segment_id")
+                return False
 
             LOG.info("   cfg_subnet: %s/%s, db_subnet: %s/%s" % (cfg_subnet.network,
                                                            cfg_subnet.prefixlen,

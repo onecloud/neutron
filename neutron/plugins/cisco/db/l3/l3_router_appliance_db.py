@@ -1063,9 +1063,10 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 # If this router was the last one with a gw port on this network
                 # delete the HSRP gw ports
                 network_id = ports[0]['network_id']
-                if self._count_ha_routers_on_network(context, network_id) == 0:                
+                if self._count_ha_routers_on_network(context, network_id) == 1:
                     device_filter = {'network_id': [id],
-                                     'device_owner': [l3_constants.DEVICE_OWNER_ROUTER_HA_GW]}
+                                     'device_owner': [l3_constants.DEVICE_OWNER_ROUTER_HA_GW,
+                                                      l3_constants.DEVICE_OWNER_ROUTER_GW]}
                     gw_ha_ports = self._core_plugin.get_ports(context.elevated(),
                                                               filters=device_filter)
                     for gw_ha_port in gw_ha_ports:
