@@ -150,7 +150,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
         return True
         
-        
+    def _get_virtual_gw_port_for_ext_net(self, ri, ex_gw_port):
+        subnet_id = ex_gw_port['subnet']['id']
+        gw_ports = ri.router.get(constants.HA_GW_KEY, [])
+        for gw_port in gw_ports:
+            if gw_port['subnet']['id'] == subnet_id:
+                if gw_port['device_owner'] == constants.DEVICE_OWNER_ROUTER_GW:
+                    return gw_port
+        return None
+    
+    def _is_global_router(self, ri):
+        if ri.router['id'] == "PHYSICAL_GLOBAL_ROUTER_ID":
+            return True
+        else:
+            return False
 
     ###### Public Functions ########
     def set_err_listener_context(self, phy_context):
@@ -165,14 +178,22 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):
-        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        virtual_gw_port = ri.router['gw_port']
-        subintf_ip = virtual_gw_port['fixed_ips'][0]['ip_address']
-        self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
-        if ex_gw_ip and self._port_needs_config(ex_gw_port):
-            # Set default route via this network's gateway ip
-            self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
-
+        # global router handles IP assignment, HSRP setup
+        # tenant router handles interface creation and default route within VRFs
+        if self._is_global_router(ri):
+            ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+            virtual_gw_port = self._get_virtual_gw_port_for_ext_net(ri, ex_gw_port)
+            subintf_ip = virtual_gw_port['fixed_ips'][0]['ip_address']
+            self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
+        else:
+            ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            subinterface = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
+            self._create_ext_subinterface_enable_only(subinterface, asr_ent)
+            if ex_gw_ip:
+                # Set default route via this network's gateway ip
+                self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
+        
     def external_gateway_removed(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip and self._port_needs_config(ex_gw_port):
@@ -379,6 +400,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     ###### Internal "Action" Functions ########
+
+    def _create_ext_subinterface_enable_only(self, subinterface, asr_ent):
+        confstr = snippets.ENABLE_INTF % (subinterface)
+        self._edit_running_config(confstr, 'ENABLE_INTF', asr_ent)
 
     def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, asr_ent, is_external=False):
         if vrf_name not in self._get_vrfs(asr_ent):

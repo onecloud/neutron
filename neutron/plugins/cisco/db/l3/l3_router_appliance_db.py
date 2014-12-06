@@ -942,11 +942,11 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                    network_id)
             raise n_exc.BadRequest(resource='router', msg=msg)
 
-        with context.session.begin(subtransactions=True):
-            phy_router = self._get_router(context, PHYSICAL_GLOBAL_ROUTER_ID) #db object, not dict
-            phy_router.gw_port = self._core_plugin._get_port(context.elevated(),
-                                                             gw_port['id'])
-            context.session.add(phy_router)
+        #with context.session.begin(subtransactions=True):
+        #    phy_router = self._get_router(context, PHYSICAL_GLOBAL_ROUTER_ID) #db object, not dict
+        #    phy_router.gw_port = self._core_plugin._get_port(context.elevated(),
+        #                                                     gw_port['id'])
+        #    context.session.add(phy_router)
 
     
     def _update_router_gw_info(self, context, router_id, info, router=None):
@@ -991,9 +991,9 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                                              l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
                 # Clear gw_port from PHYSICAL_GLOBAL_ROUTER so it can be deleted
-                phy_router = self._get_router(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID)
-                phy_router.gw_port = None
-                context.session.add(phy_router)
+                #phy_router = self._get_router(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID)
+                #phy_router.gw_port = None
+                #context.session.add(phy_router)
 
                 self._delete_hsrp_interfaces(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID, subnet,
                                              l3_constants.DEVICE_OWNER_ROUTER_GW)
@@ -1156,6 +1156,9 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
                                                         l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
+            gw_interfaces = self.get_sync_interfaces(context, router_ids,
+                                                     l3_constants.DEVICE_OWNER_ROUTER_GW)
+
             # Retrieve physical router port bindings
             all_ha_interfaces = ha_interfaces + ha_gw_interfaces
             for ha_intf in all_ha_interfaces:
@@ -1168,6 +1171,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 ha_intf['phy_router_db'] = phy_router_db                
 
             interfaces += ha_interfaces
+            ha_gw_interfaces += gw_interfaces
 
         return self._process_sync_data(routers, interfaces, floating_ips, ha_gw_interfaces)
 
