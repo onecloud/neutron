@@ -187,7 +187,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
         else:
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-            asr_ent = self._get_asr_ent_from_port(ex_gw_port)
+            asr_ent = self.target_asr
             subinterface = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
             self._create_ext_subinterface_enable_only(subinterface, asr_ent)
             if ex_gw_ip:
