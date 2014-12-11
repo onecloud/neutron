@@ -341,7 +341,6 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         for asr_ent in self._get_asr_list():
             vrf_name = self._csr_get_vrf_name(ri)
             #asr_ent = self._get_asr_ent_from_port(ex_gw_port)
-            
             out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
             # First remove NAT from outer interface
             self._remove_interface_nat(out_intfc_name, 'outside', asr_ent)
@@ -683,7 +682,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         """
 
         asr_host = asr_ent['ip']
-        asr_ssh_port = asr_ent['ssh_port']
+        asr_ssh_port = int(asr_ent['ssh_port'])
         asr_user = asr_ent['username']
         asr_password = asr_ent['password']
         self._timeout = 30
