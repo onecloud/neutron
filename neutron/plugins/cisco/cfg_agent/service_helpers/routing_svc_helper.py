@@ -510,7 +510,7 @@ class RoutingServiceHelper(object):
         :raises: neutron.plugins.cisco.cfg_agent.cfg_exceptions.DriverException
         if the configuration operation fails.
         """
-
+        LOG.error("fip process, exgw_port: %s" % (ex_gw_port))
         floating_ips = ri.router.get(l3_constants.FLOATINGIP_KEY, [])
         existing_floating_ip_ids = set(
             [fip['id'] for fip in ri.floating_ips])
@@ -624,6 +624,8 @@ class RoutingServiceHelper(object):
                 driver.enable_internal_network_NAT(ri, port, ex_gw_port)
 
     def _external_gateway_removed(self, ri, ex_gw_port):
+        LOG.error("\n\n\n******* EGR\n    ri: %s\n  egp: %s" % (ri, ex_gw_port))
+        
         driver = self._drivermgr.get_driver(ri.id)
         if ri.snat_enabled and ri.internal_ports:
             for port in ri.internal_ports:
@@ -758,6 +760,13 @@ class PhyRouterContext(RoutingServiceHelper):
             self.fullsync = True
 
 
+    def _adjust_router_list(self, routers):
+        for r in routers:
+            if r['id'] == "PHYSICAL_GLOBAL_ROUTER_ID":
+                routers.remove(r)
+                routers.append(r)
+                return
+
     def _process_routers(self, routers, removed_routers,
                          device_id=None, all_routers=False):
         """Process the set of routers.
@@ -790,6 +799,8 @@ class PhyRouterContext(RoutingServiceHelper):
                 prev_router_ids = set(self.router_info) & set(
                     [router['id'] for router in routers])
             cur_router_ids = set()
+
+            self._adjust_router_list(routers)
             for r in routers:
                 try:
                     if not r['admin_state_up']:

@@ -178,6 +178,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):
+        # LOG.error("\n\n EGA: %s" % ex_gw_port)
         # global router handles IP assignment, HSRP setup
         # tenant router handles interface creation and default route within VRFs
         if self._is_global_router(ri):
@@ -195,6 +196,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
         
     def external_gateway_removed(self, ri, ex_gw_port):
+        # LOG.error("\n\n EGR: %s" % ex_gw_port)
+        if not self._is_global_router(ri):
+            LOG.error("skip, not global interface")
+            return
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip and self._port_needs_config(ex_gw_port):
             #Remove default route via this network's gateway ip
@@ -305,8 +310,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             vrf_name = self._csr_get_vrf_name(ri)
             ext_intfc_name = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
             for acl in acls:
-                #self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
-                self._remove_dyn_nat_rule(acl, in_intfc_name, vrf_name, asr_ent)
+                self._remove_dyn_nat_rule(acl, ext_intfc_name, vrf_name, asr_ent)
+                #self._remove_dyn_nat_rule(acl, in_intfc_name, vrf_name, asr_ent)
 
 
     def _csr_add_default_route(self, ri, gw_ip, gw_port):
