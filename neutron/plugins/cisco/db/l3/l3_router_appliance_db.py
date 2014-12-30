@@ -839,6 +839,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     How many routers have a port associated with a particular external network?
     '''
     def _count_ha_routers_on_network(self, context, network_id):
+        context = context.elevated()
         rport_qry = context.session.query(models_v2.Port)
         asr_ports = rport_qry.filter_by(device_owner=l3_constants.DEVICE_OWNER_ROUTER_GW,
                                         network_id=network_id)
@@ -858,14 +859,11 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     Create a router construct used to hold "global" external network 
     HSRP interfaces of type DEVICE_OWNER_ROUTER_HA_GW
     '''
-    def _create_physical_global_router(self, context):
-
-        context = context.elevated()
-        
+    def _create_physical_global_router(self, context):        
         global_router_qry = context.session.query(l3_db.Router)
         global_router_qry = global_router_qry.filter_by(id=PHYSICAL_GLOBAL_ROUTER_ID)
         if global_router_qry.count() > 0:
-            return
+            return       
         
         with context.session.begin(subtransactions=True):
             router_db = l3_db.Router(id=PHYSICAL_GLOBAL_ROUTER_ID,
@@ -950,6 +948,8 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
     
     def _update_router_gw_info(self, context, router_id, info, router=None):
+
+        context = context.elevated()
 
         self._create_physical_global_router(context)
 
@@ -1057,6 +1057,8 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 self._core_plugin._delete_port(context.elevated(),
                                                port['id'])
 
+            self.l3_cfg_rpc_notifier.router_deleted(context, router)
+
             # if this router had no gw port, we are done
             if len(ports) > 0:
 
@@ -1064,7 +1066,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 # delete the HSRP gw ports
                 network_id = ports[0]['network_id']
                 if self._count_ha_routers_on_network(context, network_id) == 1:
-                    device_filter = {'network_id': [id],
+                    device_filter = {'network_id': [network_id],
                                      'device_owner': [l3_constants.DEVICE_OWNER_ROUTER_HA_GW,
                                                       l3_constants.DEVICE_OWNER_ROUTER_GW]}
                     gw_ha_ports = self._core_plugin.get_ports(context.elevated(),
@@ -1075,7 +1077,6 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                    
                     self._send_physical_global_router_updated_notification(context)
 
-            self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
 
     
@@ -1165,7 +1166,12 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 port_id = ha_intf['id']
                 phy_port_qry = context.session.query(CiscoPhyRouterPortBinding, CiscoPhysicalRouter)
                 phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.port_id == port_id)
-                port_binding_db, phy_router_db = phy_port_qry.filter(CiscoPhyRouterPortBinding.phy_router_id == CiscoPhysicalRouter.id).first()
+                phy_port_qry = phy_port_qry.filter(CiscoPhyRouterPortBinding.phy_router_id == CiscoPhysicalRouter.id)
+                try:
+                    port_binding_db, phy_router_db = phy_port_qry.first()
+                except TypeError:
+                    port_binding_db = None
+                    phy_router_db = None
 
                 ha_intf['port_binding_db'] = port_binding_db
                 ha_intf['phy_router_db'] = phy_router_db                

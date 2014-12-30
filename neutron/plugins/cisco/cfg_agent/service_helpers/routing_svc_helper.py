@@ -580,6 +580,7 @@ class RoutingServiceHelper(object):
         :return: None
         """
         ri = self.router_info.get(router_id)
+
         if ri is None:
             LOG.warn(_("Info for router %s was not found. "
                        "Skipping router removal"), router_id)
@@ -800,6 +801,13 @@ class PhyRouterContext(RoutingServiceHelper):
                     [router['id'] for router in routers])
             cur_router_ids = set()
 
+            # identify and remove routers that no longer exist
+            for router_id in prev_router_ids - cur_router_ids:
+                self._router_removed(router_id)
+            if removed_routers:
+                for router in removed_routers:
+                    self._router_removed(router['id'])
+
             self._adjust_router_list(routers)
             for r in routers:
                 try:
@@ -823,12 +831,7 @@ class PhyRouterContext(RoutingServiceHelper):
                     self.updated_routers.update([r['id']])
                     self.fullsync = True # TODO: Do fullsync on error to be safe for now, can optimize later
                     continue
-            # identify and remove routers that no longer exist
-            for router_id in prev_router_ids - cur_router_ids:
-                self._router_removed(router_id)
-            if removed_routers:
-                for router in removed_routers:
-                    self._router_removed(router['id'])
+            
         except Exception:
             LOG.exception(_("Exception in processing routers on device:%s"),
                           device_id)
