@@ -126,12 +126,12 @@ class ConfigSyncer(object):
         running_cfg = self.get_running_config(conn)
         parsed_cfg = ciscoconfparse.CiscoConfParse(running_cfg)
 
-        self.clean_vrfs(conn, router_id_dict, parsed_cfg)
-        self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_snat(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_nat_overload(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_vrfs(conn, router_id_dict, parsed_cfg)
 
     def get_running_config(self, conn):
         """Get the CSR's current running config.
