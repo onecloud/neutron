@@ -1023,6 +1023,8 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
 
     def delete_router(self, context, id):
+        LOG.debug("DELETING ROUTER WITH ID: %s" % id)
+        context = context.elevated()
         with context.session.begin(subtransactions=True):
             router = self._get_router(context, id)
 
@@ -1075,7 +1077,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                         self._core_plugin._delete_port(context.elevated(),
                                                        gw_ha_port['id'])
                    
-                    self._send_physical_global_router_updated_notification(context)
+                    self._send_physical_global_router_updated_notification(context.elevated())
 
 
 
