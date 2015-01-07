@@ -175,6 +175,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def internal_network_added(self, ri, port):
         gw_ip = port['subnet']['gateway_ip']
+        prefix = port['subnet']['cidr']
+        if netaddr.IPNetwork(prefix).version == 6:
+            LOG.error("ADDING IPV6 NETWORK! port: %s" % port)
+            return
         self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):

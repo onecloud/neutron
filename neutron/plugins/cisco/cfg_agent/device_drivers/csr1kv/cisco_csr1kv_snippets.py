@@ -122,7 +122,6 @@ CREATE_SUBINTERFACE_WITH_ID = """
             <cmd>ip address %s %s</cmd>
         </cli-config-data>
 </config>
-
 """
 
 #=================================================#
@@ -503,6 +502,86 @@ EMPTY_SNIPPET = """
 <config>
         <cli-config-data>
             <cmd>do cd</cmd>
+        </cli-config-data>
+</config>
+"""
+
+
+
+#=================================================#
+# Create VRF definition
+# $(config)ip routing
+# $(config)ip vrf nrouter-e7d4y5
+#=================================================#
+CREATE_VRF_DEFN = """
+<config>
+        <cli-config-data>
+            <cmd>vrf definition %s</cmd>
+            <cmd>rd %s:%s</cmd>
+            <cmd>address-family ipv4</cmd>
+            <cmd>exit-address-family</cmd>
+            <cmd>address-family ipv6</cmd>
+            <cmd>exit-address-family</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=================================================#
+# Create Subinterface (with deployment_id)
+# $(config)interface GigabitEthernet 2.500
+# $(config)encapsulation dot1Q 500
+# $(config)vrf forwarding nrouter-abc-e7d4y5
+# $(config)ip address 2001:DB8:CAFE:A::1/64
+#=================================================#
+CREATE_SUBINTERFACE_V6_WITH_ID = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
+            <cmd>encapsulation dot1Q %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
+            <cmd>ipv6 address %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=================================================#
+# Create Subinterface (with deployment_id)
+# $(config)interface GigabitEthernet 2.500
+# $(config)encapsulation dot1Q 500
+# $(config)vrf forwarding nrouter-abc-e7d4y5
+# $(config)ip address 2001:DB8:CAFE:A::1/64
+#=================================================#
+CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
+            <cmd>encapsulation dot1Q %s</cmd>
+            <cmd>ipv6 address %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=================================================#
+# Enable HSRP on a Subinterface for ASR 
+# $(config)interface GigabitEthernet 2.500
+# $(config)vrf forwarding nrouter-e7d4y5
+# $(config)standby version 2
+# $(config)standby <group> priority <priority>
+# $(config)standby <group> ip <ip>
+#=================================================#
+SET_INTC_ASR_HSRP_V6 = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>standby version 2</cmd>
+            <cmd>standby %s ipv6 autoconfig</cmd>
+            <cmd>standby %s priority %s</cmd>
+            <cmd>standby %s preempt</cmd>
+            <cmd>standby %s authentication OPEN</cmd>
+            <cmd>standby %s timer msec 200 msec 600</cmd>
+            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 """
