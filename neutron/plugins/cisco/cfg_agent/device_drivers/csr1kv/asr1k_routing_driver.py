@@ -130,8 +130,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #return self._asr_config.get_asr_list()
 
     def _get_asr_ent_from_port(self, port):
-        asr_name = port['phy_router_db']['name']
-        asr_ent = self._asr_config.get_asr_by_name(asr_name)
+        try:
+            asr_name = port['phy_router_db']['name']
+            asr_ent = self._asr_config.get_asr_by_name(asr_name)
+        except:
+            LOG.error("couldn't get target ASR name, port: %s" % port)
+            raise
+
         return asr_ent
 
     def _port_is_hsrp(self, port):
@@ -453,18 +458,21 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
 
-        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                    vrf_name)
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'CREATE_SNAT')
+        try:
+            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                        vrf_name)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'CREATE_DYN_NAT')
+        except:
+            LOG.error("DYN NAT error")
 
         confstr = snippets.SET_NAT % (inner_intfc, 'inside')
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT')
+        self._check_response(rpc_obj, 'SET_NAT_INSIDE')
 
         confstr = snippets.SET_NAT % (outer_intfc, 'outside')
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT')
+        self._check_response(rpc_obj, 'SET_NAT_OUTSIDE')
 
 
     def _add_interface_nat(self, intfc_name, intfc_type, asr_ent):
