@@ -716,20 +716,23 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         # Create HSRP standby interfaces
         port_list = []
         num_asr = len(self.asr_cfg_info.get_asr_list())
-        for asr_idx in range(0, num_asr):
-            asr_port = self._core_plugin.create_port(context, {
-                'port':
-                {'tenant_id': subnet['tenant_id'],
-                 'network_id': subnet['network_id'],
-                 'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
-                 'mac_address': attributes.ATTR_NOT_SPECIFIED,
-                 'admin_state_up': True,
-                 'device_id': router_id,
-                 'device_owner': dev_owner,
-                 'name': ''}})
+        with context.session.begin(subtransactions=True):
+            for asr_idx in range(0, num_asr):
+                asr_port = self._core_plugin.create_port(context, {
+                    'port':
+                    {'tenant_id': subnet['tenant_id'],
+                     'network_id': subnet['network_id'],
+                     'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
+                     'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                     'admin_state_up': True,
+                     'device_id': router_id,
+                     'device_owner': dev_owner,
+                     'name': ''}})
 
-            LOG.info("added new port %s" % (asr_port))
-            port_list.append(asr_port)
+                LOG.info("added new port %s" % (asr_port))
+                port_list.append(asr_port)
+        
+            self._bind_hsrp_interfaces_to_router(context, router_id,  port_list)
         
         for port in port_list:
             self.l3_rpc_notifier.routers_updated(
@@ -744,7 +747,6 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                                 notifier_api.CONF.default_notification_level,
                                 {'router_interface': ha_info})
 
-        self._bind_hsrp_interfaces_to_router(context, router_id,  port_list)
 
 
     def _delete_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
@@ -832,8 +834,8 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                                                      router_id=router_id,
                                                      phy_router_id=db_asr.id)
 
-            with context.session.begin(subtransactions=True):
-                context.session.add(port_binding)
+            #with context.session.begin(subtransactions=True):
+            context.session.add(port_binding)
 
     '''
     How many routers have a port associated with a particular external network?
@@ -892,33 +894,34 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     def _create_router_gw_hsrp_interfaces(self, context, router, network_id, existing_port_list):
         # Port has no 'tenant-id', as it is hidden from user
 
-        num_asr = len(self.asr_cfg_info.get_asr_list())
-        for asr_idx in range(0, num_asr):
-
-            gw_port = self._core_plugin.create_port(context.elevated(), {
-            'port': {'tenant_id': '',  # intentionally not set
-                     'network_id': network_id,
-                     'mac_address': attributes.ATTR_NOT_SPECIFIED,
-                     'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
-                     #'device_id': router['id'],
-                     #'device_id': network_id,
-                     'device_id': PHYSICAL_GLOBAL_ROUTER_ID,
-                     'device_owner': l3_constants.DEVICE_OWNER_ROUTER_HA_GW,
-                     'admin_state_up': True,
-                     'name': ''}})
-
-            existing_port_list.append(gw_port)
-            
-            if not gw_port['fixed_ips']:
-                for deleted_port in existing_port_list:
-                    self._core_plugin.delete_port(context.elevated(), deleted_port['id'],
-                                                  l3_port_check=False)
-                    msg = (_('Not enough IPs available for external network %s') %
-                           network_id)
+        with context.session.begin(subtransactions=True):
+            num_asr = len(self.asr_cfg_info.get_asr_list())
+            for asr_idx in range(0, num_asr):
                 
-                raise n_exc.BadRequest(resource='router', msg=msg)
+                gw_port = self._core_plugin.create_port(context.elevated(), {
+                'port': {'tenant_id': '',  # intentionally not set
+                         'network_id': network_id,
+                         'mac_address': attributes.ATTR_NOT_SPECIFIED,
+                         'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
+                         #'device_id': router['id'],
+                         #'device_id': network_id,
+                         'device_id': PHYSICAL_GLOBAL_ROUTER_ID,
+                         'device_owner': l3_constants.DEVICE_OWNER_ROUTER_HA_GW,
+                         'admin_state_up': True,
+                         'name': ''}})
+                
+                existing_port_list.append(gw_port)
+            
+                if not gw_port['fixed_ips']:
+                    for deleted_port in existing_port_list:
+                        self._core_plugin.delete_port(context.elevated(), deleted_port['id'],
+                                                      l3_port_check=False)
+                        msg = (_('Not enough IPs available for external network %s') %
+                               network_id)
+                        
+                    raise n_exc.BadRequest(resource='router', msg=msg)
 
-        self._bind_hsrp_interfaces_to_router(context, router['id'],  existing_port_list[1:])
+            self._bind_hsrp_interfaces_to_router(context, router['id'],  existing_port_list[1:])
 
     def _create_phy_router_gw_port(self, context, router, network_id):
         # Port has no 'tenant-id', as it is hidden from user

@@ -130,8 +130,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #return self._asr_config.get_asr_list()
 
     def _get_asr_ent_from_port(self, port):
-        asr_name = port['phy_router_db']['name']
-        asr_ent = self._asr_config.get_asr_by_name(asr_name)
+        try:
+            asr_name = port['phy_router_db']['name']
+            asr_ent = self._asr_config.get_asr_by_name(asr_name)
+        except:
+            LOG.error("couldn't get target ASR name, port: %s" % port)
+            raise
+
         return asr_ent
 
     def _port_is_hsrp(self, port):
@@ -463,8 +468,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._edit_running_config(confstr, 'ENABLE_INTF', asr_ent)
 
     def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, asr_ent, is_external=False):
-        if vrf_name not in self._get_vrfs(asr_ent):
-            LOG.error(_("VRF %s not present"), vrf_name)
+        #if vrf_name not in self._get_vrfs(asr_ent):
+        #    LOG.error(_("VRF %s not present"), vrf_name)
         if is_external is True:
             confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL_WITH_ID % (subinterface,
                                                                        self._asr_config.deployment_id,
@@ -478,7 +483,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _remove_subinterface(self, subinterface, asr_ent):
         #Optional : verify this is the correct subinterface
-        if self._ignore_cfg_check or self._interface_exists(subinterface, asr_ent):
+        #if self._ignore_cfg_check or self._interface_exists(subinterface, asr_ent):
+        if True:
             confstr = snippets.REMOVE_SUBINTERFACE % subinterface
             self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE', asr_ent)
 
@@ -501,18 +507,21 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
 
-        confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                    vrf_name)
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'CREATE_SNAT')
+        try:
+            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                        vrf_name)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'CREATE_DYN_NAT')
+        except:
+            LOG.error("DYN NAT error")
 
         confstr = snippets.SET_NAT % (inner_intfc, 'inside')
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT')
+        self._check_response(rpc_obj, 'SET_NAT_INSIDE')
 
         confstr = snippets.SET_NAT % (outer_intfc, 'outside')
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT')
+        self._check_response(rpc_obj, 'SET_NAT_OUTSIDE')
 
 
     def _add_interface_nat(self, intfc_name, intfc_type, asr_ent):
@@ -530,7 +539,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_dyn_nat_rule(self, acl_no, outer_intfc_name, vrf_name, asr_ent):
         conn = self._get_connection(asr_ent)
         confstr = snippets.SNAT_CFG % (acl_no, outer_intfc_name, vrf_name)
-        if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
+        #if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
+        if True:
             confstr = snippets.REMOVE_DYN_SRC_TRL_INTFC % (acl_no,
                                                            outer_intfc_name,
                                                            vrf_name)
@@ -587,7 +597,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _add_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
         confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, out_intf, gw_ip)
-        if not self._cfg_exists(confstr, asr_ent):
+        #if not self._cfg_exists(confstr, asr_ent):
+        if True:
             confstr = snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE_WITH_INTF')
@@ -595,14 +606,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_default_static_route(self, gw_ip, vrf, asr_ent, out_intf):
         conn = self._get_connection(asr_ent)
         confstr = snippets.DEFAULT_ROUTE_WITH_INTF_CFG % (vrf, out_intf, gw_ip)
-        if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
+        #if self._ignore_cfg_check or self._cfg_exists(confstr, asr_ent):
+        if True:
             confstr = snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE_WITH_INTF')
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, asr_ent, is_external=False):
-        if vrf_name not in self._get_vrfs(asr_ent):
-            LOG.error(_("VRF %s not present"), vrf_name)
+        #if vrf_name not in self._get_vrfs(asr_ent):
+        #    LOG.error(_("VRF %s not present"), vrf_name)
 
         if is_external is True:
             confstr = snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
@@ -634,14 +646,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.exception(_("Failed creating VRF %s"), vrf_name)
 
     def _remove_vrf(self, vrf_name, asr_ent):
-        if self._ignore_cfg_check or vrf_name in self._get_vrfs(asr_ent):
-            conn = self._get_connection(asr_ent)
-            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
-            rpc_obj = conn.edit_config(target='running', config=confstr)
-            if self._check_response(rpc_obj, 'REMOVE_VRF'):
-                LOG.info(_("VRF %s removed"), vrf_name)
-        else:
-            LOG.warning(_("VRF %s not present"), vrf_name)
+        #if self._ignore_cfg_check or vrf_name in self._get_vrfs(asr_ent):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.REMOVE_VRF_DEFN % vrf_name
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        if self._check_response(rpc_obj, 'REMOVE_VRF'):
+            LOG.info(_("VRF %s removed"), vrf_name)
+        #else:
+        #    LOG.warning(_("VRF %s not present"), vrf_name)
 
 
     def _get_vrfs(self, asr_ent):
