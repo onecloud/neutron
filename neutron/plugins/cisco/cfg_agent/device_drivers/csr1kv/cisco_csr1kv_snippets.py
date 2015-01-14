@@ -517,7 +517,6 @@ CREATE_VRF_DEFN = """
 <config>
         <cli-config-data>
             <cmd>vrf definition %s</cmd>
-            <cmd>rd %s:%s</cmd>
             <cmd>address-family ipv4</cmd>
             <cmd>exit-address-family</cmd>
             <cmd>address-family ipv6</cmd>
@@ -525,6 +524,8 @@ CREATE_VRF_DEFN = """
         </cli-config-data>
 </config>
 """
+#            <cmd>rd %s:%s</cmd>
+
 
 #=================================================#
 # Create Subinterface (with deployment_id)

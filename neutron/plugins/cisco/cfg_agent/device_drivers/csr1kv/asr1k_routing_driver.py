@@ -178,6 +178,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         prefix = port['subnet']['cidr']
         if netaddr.IPNetwork(prefix).version == 6:
             LOG.error("ADDING IPV6 NETWORK! port: %s" % port)
+            self._csr_create_subinterface_v6(ri, port, False, gw_ip)
             return
         self._csr_create_subinterface(ri, port, False, gw_ip)
 
@@ -229,6 +230,34 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     
 
     ###### Internal "Preparation" Functions ########
+
+    def _csr_create_subinterface_v6(self, ri, port, is_external=False, gw_ip=""):
+
+        if port['device_owner'] != constants.DEVICE_OWNER_ROUTER_INTF:
+            return
+                        
+        vrf_name = self._csr_get_vrf_name(ri)
+        ip_cidr = port['ip_cidr']
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        asr_ent = self.target_asr        
+        subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+
+        self._create_subinterface_v6(subinterface, vlan, vrf_name, ip_cidr, asr_ent, is_external)
+        self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
+
+    def _csr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
+        if port['device_owner'] != constants.DEVICE_OWNER_ROUTER_INTF:
+            return
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        group = vlan
+
+        asr_ent = self.target_asr
+        
+        priority = asr_ent['order']
+        subinterface = self._get_interface_name_from_hosting_port(port, asr_ent)
+
+        self._set_ha_HSRP_v6(subinterface, priority, group, asr_ent, is_external)
+
 
     def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
 
@@ -408,6 +437,26 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     ###### Internal "Action" Functions ########
+    
+    def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, asr_ent, is_external=False):
+        if is_external is True:
+            confstr = snippets.CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID % (subinterface,
+                                                                        self._asr_config.deployment_id,
+                                                                        vlan_id, ip_cidr)
+        else:
+            confstr = snippets.CREATE_SUBINTERFACE_V6_WITH_ID % (subinterface,
+                                                                 self._asr_config.deployment_id,
+                                                                 vlan_id, vrf_name, ip_cidr)
+
+        self._edit_running_config(confstr, 'CREATE_SUBINTERFACE_V6', asr_ent)
+
+    def _set_ha_HSRP_v6(self, subinterface, priority, group, asr_ent, is_external=False):
+
+        confstr = snippets.SET_INTC_ASR_HSRP_V6 % (subinterface, group, group,
+                                                   priority, group, group, group, group, group)
+        
+        action = "SET_INTC_HSRP_V6 (Group: %s, Priority: % s)" % (group, priority)
+        self._edit_running_config(confstr, action, asr_ent)
 
     def _create_ext_subinterface_enable_only(self, subinterface, asr_ent):
         confstr = snippets.ENABLE_INTF % (subinterface)
@@ -577,7 +626,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _create_vrf(self, vrf_name, asr_ent):
         try:
             conn = self._get_connection(asr_ent)
-            confstr = snippets.CREATE_VRF % vrf_name
+            confstr = snippets.CREATE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             if self._check_response(rpc_obj, 'CREATE_VRF'):
                 LOG.info(_("VRF %s successfully created"), vrf_name)
@@ -587,7 +636,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _remove_vrf(self, vrf_name, asr_ent):
         if self._ignore_cfg_check or vrf_name in self._get_vrfs(asr_ent):
             conn = self._get_connection(asr_ent)
-            confstr = snippets.REMOVE_VRF % vrf_name
+            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             if self._check_response(rpc_obj, 'REMOVE_VRF'):
                 LOG.info(_("VRF %s removed"), vrf_name)
