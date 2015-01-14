@@ -118,7 +118,7 @@ CREATE_SUBINTERFACE_WITH_ID = """
             <cmd>interface %s</cmd>
             <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
             <cmd>encapsulation dot1Q %s</cmd>
-            <cmd>ip vrf forwarding %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
             <cmd>ip address %s %s</cmd>
         </cli-config-data>
 </config>
@@ -188,7 +188,7 @@ SET_INTC_ASR_HSRP = """
 <config>
         <cli-config-data>
             <cmd>interface %s</cmd>
-            <cmd>ip vrf forwarding %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
             <cmd>standby version 2</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
