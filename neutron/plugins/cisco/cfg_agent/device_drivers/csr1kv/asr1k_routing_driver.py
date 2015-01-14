@@ -213,15 +213,17 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
     def external_gateway_removed(self, ri, ex_gw_port):
         # LOG.error("\n\n EGR: %s" % ex_gw_port)
-        if not self._is_global_router(ri):
+        if self._is_global_router(ri):
+            # Finally, remove external network subinterface
+            self._csr_remove_subinterface(ex_gw_port)
             LOG.error("skip, not global interface")
-            return
-        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        if ex_gw_ip and self._port_needs_config(ex_gw_port):
-            #Remove default route via this network's gateway ip
-            self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
-        #Finally, remove external network subinterface
-        self._csr_remove_subinterface(ex_gw_port)
+        else:
+            ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+            if ex_gw_ip and ex_gw_port['device_owner'] == constants.DEVICE_OWNER_ROUTER_GW:
+                # LOG.debug("REMOVE ROUTE PORT %s" % ex_gw_port)
+                # Remove default route via this network's gateway ip
+                self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
+        
 
     def delete_invalid_cfg(self, router_db_info):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
