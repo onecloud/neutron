@@ -36,7 +36,7 @@ ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1
 
 DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_V6_REGEX = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 Port-channel(\d+)\.(\d+) ([0-9A-Fa-f:])"
+DEFAULT_ROUTE_V6_REGEX = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 Port-channel(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
