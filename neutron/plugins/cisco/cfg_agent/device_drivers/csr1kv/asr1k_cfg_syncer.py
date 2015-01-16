@@ -40,6 +40,13 @@ DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
 
+def is_port_v6(self, port):
+    prefix = port['subnet']['cidr']
+    if netaddr.IPNetwork(prefix).version == 6:
+        return True
+    else:
+        return False
+
 class ConfigSyncer(object):
 
     def __init__(self, router_db_info, my_dep_id, other_dep_ids):
@@ -94,9 +101,10 @@ class ConfigSyncer(object):
                     interfaces = router['_interfaces']
                     for intf in interfaces:
                         if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
-                            intf_segment_id = intf['hosting_info']['segmentation_id']
-                            segment_nat_dict[gw_segment_id] = True
-                            segment_nat_dict[intf_segment_id] = True
+                            if is_port_v6(intf) != True:
+                                intf_segment_id = intf['hosting_info']['segmentation_id']
+                                segment_nat_dict[gw_segment_id] = True
+                                segment_nat_dict[intf_segment_id] = True
 
             
         return router_id_dict, interface_segment_dict, segment_nat_dict
