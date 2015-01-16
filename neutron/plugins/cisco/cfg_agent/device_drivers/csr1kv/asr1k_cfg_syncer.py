@@ -15,11 +15,14 @@ NROUTER_REGEX = "nrouter-(\w{6,6})-" + DEP_ID_REGEX
 #NROUTER_REGEX = "nrouter-(\w{6,6})"
 
 VRF_REGEX = "ip vrf " + NROUTER_REGEX
+VRF_REGEX_NEW = "vrf definition " + NROUTER_REGEX
 
 INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
 INTF_DESC_REGEX = "\s*description OPENSTACK_NEUTRON-" + DEP_ID_REGEX + "_INTF"
 VRF_EXT_INTF_REGEX = "\s*ip vrf forwarding .*"
 VRF_INTF_REGEX = "\s*ip vrf forwarding " + NROUTER_REGEX
+VRF_EXT_INTF_REGEX_NEW = "\s*vrf forwarding .*"
+VRF_INTF_REGEX_NEW = "\s*vrf forwarding " + NROUTER_REGEX
 DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
 HSRP_REGEX = "\s*standby (\d+) .*"
@@ -156,9 +159,9 @@ class ConfigSyncer(object):
         rconf_ids = []
         invalid_dep_id_list = []
 
-        for parsed_obj in parsed_cfg.find_objects(VRF_REGEX):
+        for parsed_obj in parsed_cfg.find_objects(VRF_REGEX_NEW):
             LOG.info("VRF object: %s" % (parsed_obj))
-            match_obj = re.match(VRF_REGEX, parsed_obj.text)
+            match_obj = re.match(VRF_REGEX_NEW, parsed_obj.text)
             router_id, dep_id = match_obj.group(1,2)
             LOG.info("    First 6 digits of router ID: %s, dep_id: %s\n" % (router_id, dep_id))
             if dep_id == self.dep_id:
@@ -186,17 +189,17 @@ class ConfigSyncer(object):
         
         for router_id in del_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
-            confstr = snippets.REMOVE_VRF % vrf_name
+            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
         for router_id, dep_id in invalid_routers:
             vrf_name = "nrouter-%s-%s" % (router_id, dep_id)
-            confstr = snippets.REMOVE_VRF % vrf_name
+            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             
         for router_id in add_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
-            confstr = snippets.CREATE_VRF % vrf_name
+            confstr = snippets.CREATE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
             
@@ -514,7 +517,7 @@ class ConfigSyncer(object):
             
             # Check VRF config
             if intf.is_external:
-                vrf_cfg = intf.re_search_children(VRF_EXT_INTF_REGEX)
+                vrf_cfg = intf.re_search_children(VRF_EXT_INTF_REGEX_NEW)
                 vrf_cfg = self.get_single_cfg(vrf_cfg)
                 LOG.info("VRF: %s" % (vrf_cfg))
                 if vrf_cfg is not None: # external network has no vrf
@@ -522,7 +525,7 @@ class ConfigSyncer(object):
                     pending_delete_list.append(intf)
                     continue
             else:
-                vrf_cfg = intf.re_search_children(VRF_INTF_REGEX)
+                vrf_cfg = intf.re_search_children(VRF_INTF_REGEX_NEW)
                 vrf_cfg = self.get_single_cfg(vrf_cfg)
                 LOG.info("VRF: %s" % (vrf_cfg))
                 if not vrf_cfg:
@@ -531,7 +534,7 @@ class ConfigSyncer(object):
                     continue
                 
                 # check for VRF mismatch
-                match_obj = re.match(VRF_INTF_REGEX, vrf_cfg.text)
+                match_obj = re.match(VRF_INTF_REGEX_NEW, vrf_cfg.text)
                 router_id, dep_id = match_obj.group(1,2)
                 if dep_id != self.dep_id:
                     LOG.info("Deployment ID mismatch, deleting intf")
