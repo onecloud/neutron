@@ -913,11 +913,11 @@ class PhyRouterContext(RoutingServiceHelper):
                 self._external_gateway_removed(ri, p)
                 ri.ha_gw_ports.remove(p)
 
-            if ex_gw_port and not ri.ex_gw_port:
-                self._set_subnet_info(ex_gw_port)
-                self._external_gateway_added(ri, ex_gw_port)
-            elif not ex_gw_port and ri.ex_gw_port:
-                self._external_gateway_removed(ri, ri.ex_gw_port)
+            # if ex_gw_port and not ri.ex_gw_port:
+            #     self._set_subnet_info(ex_gw_port)
+            #     self._external_gateway_added(ri, ex_gw_port)
+            # elif not ex_gw_port and ri.ex_gw_port:
+            #     self._external_gateway_removed(ri, ri.ex_gw_port)
 
             if ex_gw_port:
                 self._process_router_floating_ips(ri, ex_gw_port)

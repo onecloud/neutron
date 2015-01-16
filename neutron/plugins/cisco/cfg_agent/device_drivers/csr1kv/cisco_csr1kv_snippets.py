@@ -525,10 +525,6 @@ CREATE_VRF_DEFN = """
 """
 #            <cmd>rd %s:%s</cmd>
 
-
-#            <cmd>rd %s:%s</cmd>
-
-
 #=================================================#
 # Remove VRF definition
 # $(config)no vrf definition nrouter-e7d4y5
@@ -600,3 +596,34 @@ SET_INTC_ASR_HSRP_V6 = """
         </cli-config-data>
 </config>
 """
+
+
+
+#=============================================================================#
+# Set default ipv6 route with interface
+# Syntax: ipv6 route vrf <vrf-name> ::/0 <interface> <next hop>
+# eg: $(config)ipv6 route vrf nrouter-e7d4y5 ::/0 po10.304 2001:DB8:CAFE:22::1/64
+#=============================================================================#
+DEFAULT_ROUTE_V6_WITH_INTF_CFG = 'ipv6 route vrf %s ::/0 %s %s'
+
+SET_DEFAULT_ROUTE_V6_WITH_INTF = """
+<config>
+        <cli-config-data>
+            <cmd>ipv6 route vrf %s ::/0 %s %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#=============================================================================#
+# Remove default ipv6 route
+# Syntax: ipv6 route vrf <vrf-name> ::/0 <interface> <next hop>
+# eg: $(config)ipv6 route vrf nrouter-e7d4y5 ::/0 po10.304 2001:DB8:CAFE:22::1/64
+#=============================================================================#
+REMOVE_DEFAULT_ROUTE_V6_WITH_INTF = """
+<config>
+        <cli-config-data>
+            <cmd>ipv6 route vrf %s ::/0 %s %s</cmd>
+        </cli-config-data>
+</config>
+"""
+

@@ -192,7 +192,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def internal_network_added(self, ri, port):
         gw_ip = port['subnet']['gateway_ip']
         if self._is_port_v6(port):
-            LOG.error("ADDING IPV6 NETWORK! port: %s" % port)
+            LOG.debug("ADDING IPV6 NETWORK port: %s" % port)
             self._csr_create_subinterface_v6(ri, port, False, gw_ip)
         else:
             self._csr_create_subinterface(ri, port, False, gw_ip)
@@ -218,20 +218,23 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._create_ext_subinterface_enable_only(subinterface, asr_ent)
             if ex_gw_ip:
                 # Set default route via this network's gateway ip
-                # TODO: v6 default route
-                self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
+                if self._is_port_v6(ex_gw_port):
+                    self._asr_add_default_route_v6(ri, ex_gw_ip, ex_gw_port)
+                else:
+                    self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
         
     def external_gateway_removed(self, ri, ex_gw_port):
-        # TODO: Retest this function
-        if not self._is_global_router(ri):
-            LOG.error("skip, not global interface")
-            return
-        ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-        if ex_gw_ip and self._port_needs_config(ex_gw_port):
-            #Remove default route via this network's gateway ip
-            self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
-        #Finally, remove external network subinterface
-        self._csr_remove_subinterface(ex_gw_port)
+        if self._is_global_router(ri):
+            self._csr_remove_subinterface(ex_gw_port)
+        else:
+            ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
+            if ex_gw_ip and ex_gw_port['device_owner'] == constants.DEVICE_OWNER_ROUTER_GW:
+                # LOG.debug("REMOVE ROUTE PORT %s" % ex_gw_port)
+                # Remove default route via this network's gateway ip
+                if self._is_port_v6(ex_gw_port):
+                    self._asr_remove_default_route_v6(ri, ex_gw_ip, ex_gw_port)
+                else:
+                    self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
 
     def delete_invalid_cfg(self, router_db_info):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
@@ -485,6 +488,28 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
         action = "SET_INTC_HSRP_V6 (Group: %s, Priority: % s)" % (group, priority)
         self._edit_running_config(confstr, action, asr_ent)
+
+    def _asr_add_default_route_v6(self, ri, gw_ip, gw_port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        subinterface = self._get_interface_name_from_hosting_port(gw_port, self.target_asr)
+        self._add_default_static_route_v6(gw_ip, vrf_name, self.target_asr, subinterface)
+
+    def _asr_remove_default_route_v6(self, ri, gw_ip, gw_port):
+        vrf_name = self._csr_get_vrf_name(ri)
+        subinterface = self._get_interface_name_from_hosting_port(gw_port, self.target_asr)
+        self._remove_default_static_route_v6(gw_ip, vrf_name, self.target_asr, subinterface)
+
+    def _add_default_static_route_v6(self, gw_ip, vrf, asr_ent, out_intf):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.SET_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'SET_DEFAULT_ROUTE_V6_WITH_INTF')
+
+    def _remove_default_static_route_v6(self, gw_ip, vrf, asr_ent, out_intf):
+        conn = self._get_connection(asr_ent)
+        confstr = snippets.REMOVE_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
+        rpc_obj = conn.edit_config(target='running', config=confstr)
+        self._check_response(rpc_obj, 'REMOVE_DEFAULT_ROUTE_V6_WITH_INTF')
 
     def _create_ext_subinterface_enable_only(self, subinterface, asr_ent):
         confstr = snippets.ENABLE_INTF % (subinterface)

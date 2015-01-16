@@ -36,6 +36,8 @@ ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1
 
 DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
+DEFAULT_ROUTE_V6_REGEX = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 Port-channel(\d+)\.(\d+) ([0-9A-Fa-f:])"
+
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
@@ -140,7 +142,10 @@ class ConfigSyncer(object):
         self.clean_snat(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_nat_overload(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
-        self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
+        self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict,
+                                 parsed_cfg, DEFAULT_ROUTE_REGEX)
+        self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict,
+                                 parsed_cfg, DEFAULT_ROUTE_V6_REGEX)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_vrfs(conn, router_id_dict, parsed_cfg)
 
@@ -217,12 +222,12 @@ class ConfigSyncer(object):
         else:
             return cfg_line[0]
 
-    def clean_default_route(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+    def clean_default_route(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg, route_regex):
         delete_route_list = []
-        default_routes = parsed_cfg.find_objects(DEFAULT_ROUTE_REGEX)
+        default_routes = parsed_cfg.find_objects(route_regex)
         for route in default_routes:
             LOG.info("\ndefault route: %s" % (route))
-            match_obj = re.match(DEFAULT_ROUTE_REGEX, route.text)
+            match_obj = re.match(route_regex, route.text)
             router_id, dep_id, intf_num, segment_id, next_hop = match_obj.group(1,2,3,4,5)
             segment_id = int(segment_id)
             intf_num = int(intf_num)
@@ -261,7 +266,7 @@ class ConfigSyncer(object):
 
             # Check that nexthop matches gw_ip of external network
             gw_ip = gw_port['subnet']['gateway_ip']
-            if next_hop != gw_ip:
+            if next_hop.lower() != gw_ip.lower():
                 LOG.info("route has incorrect next-hop, deleting")
                 delete_route_list.append(route.text)
                 continue
