@@ -170,6 +170,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         else:
             return False
 
+    def _is_port_v6(self, port):
+        prefix = port['subnet']['cidr']
+        if netaddr.IPNetwork(prefix).version == 6:
+            return True
+        else:
+            return False
+
     ###### Public Functions ########
     def set_err_listener_context(self, phy_context):
         self._err_listener = NetConfErrorListener()
@@ -180,12 +187,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def internal_network_added(self, ri, port):
         gw_ip = port['subnet']['gateway_ip']
-        prefix = port['subnet']['cidr']
-        if netaddr.IPNetwork(prefix).version == 6:
+        if self._is_port_v6(port):
             LOG.error("ADDING IPV6 NETWORK! port: %s" % port)
             self._csr_create_subinterface_v6(ri, port, False, gw_ip)
-            return
-        self._csr_create_subinterface(ri, port, False, gw_ip)
+        else:
+            self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):
         # LOG.error("\n\n EGA: %s" % ex_gw_port)
@@ -300,6 +306,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     def _csr_add_internalnw_nat_rules(self, ri, port, ex_port):
+        if self._is_port_v6(port) or self._is_port_v6(ex_port):
+            LOG.debug("IPv6 port, no NAT add needed")
+            return
+
         if not self._port_needs_config(port):
             return
 
@@ -321,6 +331,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                             outer_intfc, vrf_name, asr_ent)
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
+        if self._is_port_v6(ex_port):
+            LOG.debug("IPv6 port, no NAT delete needed")
+            return
 
         acls = []
         #First disable nat in all inner ports
