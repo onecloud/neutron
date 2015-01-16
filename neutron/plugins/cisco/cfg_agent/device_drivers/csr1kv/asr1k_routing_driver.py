@@ -204,18 +204,25 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
             virtual_gw_port = self._get_virtual_gw_port_for_ext_net(ri, ex_gw_port)
             subintf_ip = virtual_gw_port['fixed_ips'][0]['ip_address']
-            self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
+            if self._is_port_v6(ex_gw_port):
+                self._csr_create_subinterface_v6(ri, ex_gw_port, True, subintf_ip)
+            else:
+                self._csr_create_subinterface(ri, ex_gw_port, True, subintf_ip)
         else:
+            # Need this else case because default routes are mapped to VRFs (tenant routers)
+            # Global Router is not aware of Tenant Routers with ext network assigned
+            # Thus, default route must be handled per Tenant Router
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
             asr_ent = self.target_asr
             subinterface = self._get_interface_name_from_hosting_port(ex_gw_port, asr_ent)
             self._create_ext_subinterface_enable_only(subinterface, asr_ent)
             if ex_gw_ip:
                 # Set default route via this network's gateway ip
+                # TODO: v6 default route
                 self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
         
     def external_gateway_removed(self, ri, ex_gw_port):
-        # LOG.error("\n\n EGR: %s" % ex_gw_port)
+        # TODO: Retest this function
         if not self._is_global_router(ri):
             LOG.error("skip, not global interface")
             return
