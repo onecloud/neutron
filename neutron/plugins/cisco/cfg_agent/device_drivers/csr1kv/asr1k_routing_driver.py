@@ -143,6 +143,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         hsrp_types = [constants.DEVICE_OWNER_ROUTER_HA_GW, constants.DEVICE_OWNER_ROUTER_HA_INTF]
         return port['device_owner'] in hsrp_types
 
+    def _v6_port_needs_config(self, port):
+        valid_port_types = [constants.DEVICE_OWNER_ROUTER_GW, constants.DEVICE_OWNER_ROUTER_INTF]
+        return port['device_owner'] in valid_port_types
+        
     def _port_needs_config(self, port):
         if not self._port_is_hsrp(port):
             LOG.info("ignoring non-HSRP interface")
@@ -194,7 +198,6 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             self._csr_create_subinterface(ri, port, False, gw_ip)
 
     def external_gateway_added(self, ri, ex_gw_port):
-        # LOG.error("\n\n EGA: %s" % ex_gw_port)
         # global router handles IP assignment, HSRP setup
         # tenant router handles interface creation and default route within VRFs
         if self._is_global_router(ri):
@@ -243,8 +246,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     ###### Internal "Preparation" Functions ########
 
     def _csr_create_subinterface_v6(self, ri, port, is_external=False, gw_ip=""):
-
-        if port['device_owner'] != constants.DEVICE_OWNER_ROUTER_INTF:
+        if self._v6_port_needs_config(port) != True:
             return
                         
         vrf_name = self._csr_get_vrf_name(ri)
@@ -257,8 +259,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
 
     def _csr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
-        if port['device_owner'] != constants.DEVICE_OWNER_ROUTER_INTF:
+        if self._v6_port_needs_config(port) != True:
             return
+
         vlan = self._get_interface_vlan_from_hosting_port(port)
         group = vlan
 
