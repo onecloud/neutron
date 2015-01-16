@@ -510,18 +510,31 @@ EMPTY_SNIPPET = """
 
 #=================================================#
 # Create VRF definition
-# $(config)ip routing
-# $(config)ip vrf nrouter-e7d4y5
+# $(config)vrf definition nrouter-e7d4y5
 #=================================================#
 CREATE_VRF_DEFN = """
 <config>
         <cli-config-data>
             <cmd>vrf definition %s</cmd>
-            <cmd>rd %s:%s</cmd>
             <cmd>address-family ipv4</cmd>
             <cmd>exit-address-family</cmd>
             <cmd>address-family ipv6</cmd>
             <cmd>exit-address-family</cmd>
+        </cli-config-data>
+</config>
+"""
+
+#            <cmd>rd %s:%s</cmd>
+
+
+#=================================================#
+# Remove VRF definition
+# $(config)no vrf definition nrouter-e7d4y5
+#=================================================#
+REMOVE_VRF_DEFN = """
+<config>
+        <cli-config-data>
+            <cmd>no vrf definition %s</cmd>
         </cli-config-data>
 </config>
 """
