@@ -40,7 +40,7 @@ DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
 
-def is_port_v6(self, port):
+def is_port_v6(port):
     prefix = port['subnet']['cidr']
     if netaddr.IPNetwork(prefix).version == 6:
         return True
