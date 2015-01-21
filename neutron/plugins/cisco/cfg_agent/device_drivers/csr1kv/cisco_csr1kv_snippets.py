@@ -609,7 +609,7 @@ DEFAULT_ROUTE_V6_WITH_INTF_CFG = 'ipv6 route vrf %s ::/0 %s %s'
 SET_DEFAULT_ROUTE_V6_WITH_INTF = """
 <config>
         <cli-config-data>
-            <cmd>ipv6 route vrf %s ::/0 %s next-hop-vrf default</cmd>
+            <cmd>ipv6 route vrf %s ::/0 %s nexthop-vrf default</cmd>
         </cli-config-data>
 </config>
 """
@@ -622,7 +622,7 @@ SET_DEFAULT_ROUTE_V6_WITH_INTF = """
 REMOVE_DEFAULT_ROUTE_V6_WITH_INTF = """
 <config>
         <cli-config-data>
-            <cmd>no ipv6 route vrf %s ::/0 %s next-hop-vrf default</cmd>
+            <cmd>no ipv6 route vrf %s ::/0 %s nexthop-vrf default</cmd>
         </cli-config-data>
 </config>
 """
