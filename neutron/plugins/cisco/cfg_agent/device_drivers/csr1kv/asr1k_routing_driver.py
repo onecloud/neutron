@@ -551,11 +551,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         conn = self._get_connection(asr_ent)
         # Duplicate ACL creation throws error, so checking
         # it first. Remove it in future as this is not common in production
-        acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
-        if not acl_present:
+        #acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
+        #if not acl_present:
+        try:
             confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
+        except:
+            LOG.error("CREATE_ACL error")
 
         try:
             confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
