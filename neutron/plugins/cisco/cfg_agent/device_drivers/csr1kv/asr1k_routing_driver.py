@@ -122,7 +122,18 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self.hsrp_real_ip_base = 200
         self.target_asr = target_asr
         self._err_listener = None
+        self._fullsync = False
+        self._existing_cfg_dict = None
         return
+
+    def prepare_fullsync(self, existing_cfg_dict):
+        self._fullsync = True
+        #ioscfg = self._get_running_config(self.target_asr)
+        #parse = ciscoconfparse.CiscoConfParse(ioscfg)
+        self._existing_cfg_dict = existing_cfg_dict
+
+    def clear_fullsync(self):
+        self._fullsync = False
 
     def _get_asr_list(self):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
@@ -243,6 +254,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                    self._asr_config.deployment_id,
                                                    self._asr_config.other_dep_ids)
         cfg_syncer.delete_invalid_cfg(conn)
+        return cfg_syncer.existing_cfg_dict
 
     def send_empty_cfg(self):
         asr_ent = self._asr_config.get_asr_by_name(self.target_asr['name'])
@@ -329,6 +341,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         vrf_name = self._csr_get_vrf_name(ri)
         in_vlan = self._get_interface_vlan_from_hosting_port(port)
+        out_vlan = self._get_interface_vlan_from_hosting_port(ex_port)
         acl_no = 'neutron_acl_%s_%s' % (self._asr_config.deployment_id,
                                         str(in_vlan))
         internal_cidr = port['ip_cidr']
@@ -341,7 +354,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         outer_intfc = self._get_interface_name_from_hosting_port(ex_port, asr_ent)
         self._nat_rules_for_internet_access(acl_no, internal_net,
                                             netmask, inner_intfc,
-                                            outer_intfc, vrf_name, asr_ent)
+                                            outer_intfc, vrf_name, asr_ent, in_vlan, out_vlan)
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
         if self._is_port_v6(ex_port):
@@ -543,7 +556,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                        netmask,
                                        inner_intfc,
                                        outer_intfc,
-                                       vrf_name, asr_ent):
+                                       vrf_name, asr_ent, in_vlan, out_vlan):
         """Configure the NAT rules for an internal network.
 
            refer to comments in parent class
@@ -554,27 +567,43 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
         #if not acl_present:
         try:
-            confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
-            rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'CREATE_ACL')
+            if self._fullsync and in_vlan in self.existing_cfg_dict['acls']:
+                LOG.debug("Skip cfg for existing ACL")
+                pass
+            else:
+                confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
+                rpc_obj = conn.edit_config(target='running', config=confstr)
+                self._check_response(rpc_obj, 'CREATE_ACL')
         except:
             LOG.error("CREATE_ACL error")
 
         try:
-            confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                        vrf_name)
-            rpc_obj = conn.edit_config(target='running', config=confstr)
-            self._check_response(rpc_obj, 'CREATE_DYN_NAT')
+            if self._fullsync and in_vlan in self.existing_cfg_dict['dyn_nat']:
+                LOG.debug("Skip cfg for existing dynamic NAT rule")
+                pass
+            else:
+                confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                                                            vrf_name)
+                rpc_obj = conn.edit_config(target='running', config=confstr)
+                self._check_response(rpc_obj, 'CREATE_DYN_NAT')
         except:
             LOG.error("DYN NAT error")
 
-        confstr = snippets.SET_NAT % (inner_intfc, 'inside')
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT_INSIDE')
-
-        confstr = snippets.SET_NAT % (outer_intfc, 'outside')
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, 'SET_NAT_OUTSIDE')
+        if self._fullsync and in_vlan in self.existing_cfg_dict['interfaces']:
+            LOG.debug("Skip cfg for existing 'nat inside'")
+            pass
+        else:
+            confstr = snippets.SET_NAT % (inner_intfc, 'inside')
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'SET_NAT_INSIDE')
+            
+        if self._fullsync and out_vlan in self.existing_cfg_dict['interfaces']:
+            LOG.debug("Skip cfg for existing 'nat outside'")
+            pass
+        else:
+            confstr = snippets.SET_NAT % (outer_intfc, 'outside')
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, 'SET_NAT_OUTSIDE')
 
 
     def _add_interface_nat(self, intfc_name, intfc_type, asr_ent):
@@ -622,6 +651,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         """
         conn = self._get_connection(asr_ent)
         vlan = ex_gw_port['hosting_info']['segmentation_id']
+
+        if self._fullsync and floating_ip in self.existing_cfg_dict['static_nat']:
+            LOG.debug("Skip cfg for existing floating IP")
+            return
         
         confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)

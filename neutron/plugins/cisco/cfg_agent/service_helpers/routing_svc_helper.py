@@ -708,6 +708,14 @@ class PhyRouterContext(RoutingServiceHelper):
         driver = self._drivermgr.get_driver(None)
         driver.delete_invalid_cfg(router_db_info)
 
+    def prepare_fullsync(self, existing_cfg_dict):
+        driver = self.drivermgr.get_driver(None)
+        driver.prepare_fullsync(existing_cfg_dict)
+
+    def clear_fullsync(self):
+        driver = self.drivermgr.get_driver(None)
+        driver.clear_fullsync()
+
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
             LOG.info("Sending heartbeat to ASR")
@@ -726,9 +734,9 @@ class PhyRouterContext(RoutingServiceHelper):
                 self.removed_routers.clear()
                 self.sync_devices.clear()
                 routers = self._fetch_router_info(all_routers=True)
-                self.delete_invalid_cfg(routers)
+                existing_cfg_dict = self.delete_invalid_cfg(routers)
+                self.prepare_fullsync(existing_cfg_dict)
                 self.router_info = {}
-
             else:
                 if self.updated_routers:
                     router_ids = list(self.updated_routers)
@@ -754,7 +762,7 @@ class PhyRouterContext(RoutingServiceHelper):
             #             0, all_routers=all_routers_flag)
             #pool.waitall()
             self._process_routers(routers, removed_routers, 0, all_routers=all_routers_flag)
-                
+            self.clear_fullsync()
         except Exception:
             LOG.exception(_("Failed processing routers"))
             self.fullsync = True

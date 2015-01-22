@@ -58,6 +58,12 @@ class ConfigSyncer(object):
         self.segment_nat_dict = segment_nat_dict
         self.dep_id = my_dep_id
         self.other_dep_ids = other_dep_ids
+        self.existing_cfg_dict = {}
+        self.existing_cfg_dict['interfaces'] = {}
+        self.existing_cfg_dict['dyn_nat'] = {}
+        self.existing_cfg_dict['static_nat'] = {}
+        self.existing_cfg_dict['acls'] = {}
+        self.existing_cfg_dict['routes'] = {}
 
     def process_routers_data(self, routers):
         router_id_dict = {}
@@ -270,6 +276,8 @@ class ConfigSyncer(object):
                 LOG.info("route has incorrect next-hop, deleting")
                 delete_route_list.append(route.text)
                 continue
+            
+            self.existing_cfg_dict['routes'][segment_id] = route
 
         for route_cfg in delete_route_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (route_cfg))
@@ -336,6 +344,8 @@ class ConfigSyncer(object):
                 LOG.info("snat rule does not match defined floating IPs, deleting")
                 delete_fip_list.append(snat_rule.text)
                 continue
+
+            self.existing_cfg_dict['static_nat'][outer_ip] = snat_rule
         
         for fip_cfg in delete_fip_list:
              del_cmd = XML_CMD_TAG % ("no %s" % (fip_cfg))
@@ -396,6 +406,9 @@ class ConfigSyncer(object):
                 LOG.info("router does not have this internal network assigned, deleting rule")
                 delete_nat_list.append(nat_rule.text)
                 continue
+
+
+            self.existing_cfg_dict['dyn_nat'][segment_id] = nat_rule
             
         for nat_cfg in delete_nat_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (nat_cfg))
@@ -461,7 +474,9 @@ class ConfigSyncer(object):
             # Check that permit rules match subnets defined on openstack intfs
             if self.check_acl_permit_rules_valid(segment_id, acl, intf_segment_dict) is False:
                 delete_acl_list.append(acl.text)
+                continue
 
+            self.existing_cfg_dict['acls'] = acl
             
         for acl_cfg in delete_acl_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg))
@@ -469,8 +484,7 @@ class ConfigSyncer(object):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             
 
-    def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
-        
+    def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):        
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children(INTF_DESC_REGEX)]
 
@@ -559,6 +573,7 @@ class ConfigSyncer(object):
                     continue
 
             # Checks beyond this point don't trigger intf delete
+            self.existing_cfg_dict['interfaces'][intf.segment_id] = intf
 
             # Fix NAT config
             intf_nat_type = intf.re_search_children(INTF_NAT_REGEX)
@@ -569,6 +584,8 @@ class ConfigSyncer(object):
             
             LOG.info("NAT Type: %s" % intf_nat_type)
 
+            intf.nat_type = intf_nat_type
+
             if segment_nat_dict[intf.segment_id] == True:
                 if intf.is_external:
                     if intf_nat_type != "outside":
@@ -577,6 +594,7 @@ class ConfigSyncer(object):
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                         LOG.info("NAT type mismatch, should be outside")
                         rpc_obj = conn.edit_config(target='running', config=confstr)
+                        intf.nat_type = "outside"
                 else:
                     if intf_nat_type != "inside":
                         nat_cmd = XML_CMD_TAG % (intf.text)
@@ -584,6 +602,7 @@ class ConfigSyncer(object):
                         confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                         LOG.info("NAT type mismatch, should be inside")
                         rpc_obj = conn.edit_config(target='running', config=confstr)
+                        intf.nat_type = "inside"
             else:
                 if intf_nat_type is not None:
                     nat_cmd = XML_CMD_TAG % (intf.text)
@@ -591,6 +610,7 @@ class ConfigSyncer(object):
                     confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
                     LOG.info("NAT type mismatch, should have no NAT")
                     rpc_obj = conn.edit_config(target='running', config=confstr)
+                    intf.nat_type = None
 
             
             # Delete any hsrp config with wrong group number
