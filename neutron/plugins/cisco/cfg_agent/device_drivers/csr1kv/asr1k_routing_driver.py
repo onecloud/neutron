@@ -567,8 +567,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
         #if not acl_present:
         try:
-            if self._fullsync and in_vlan in self._existing_cfg_dict['acls']:
-                LOG.debug("Skip cfg for existing ACL")
+            if self._fullsync and int(in_vlan) in self._existing_cfg_dict['acls']:
+                LOG.info("Skip cfg for existing ACL")
                 pass
             else:
                 confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
@@ -578,8 +578,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.error("CREATE_ACL error")
 
         try:
-            if self._fullsync and in_vlan in self._existing_cfg_dict['dyn_nat']:
-                LOG.debug("Skip cfg for existing dynamic NAT rule")
+            if self._fullsync and int(in_vlan) in self._existing_cfg_dict['dyn_nat']:
+                LOG.info("Skip cfg for existing dynamic NAT rule")
                 pass
             else:
                 confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
@@ -589,15 +589,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         except:
             LOG.error("DYN NAT error")
 
-        if self._fullsync and in_vlan in self._existing_cfg_dict['interfaces']:
-            LOG.debug("Skip cfg for existing 'nat inside'")
+        if self._fullsync and int(in_vlan) in self._existing_cfg_dict['interfaces']:
+            LOG.info("Skip cfg for existing 'nat inside'")
             pass
         else:
             confstr = snippets.SET_NAT % (inner_intfc, 'inside')
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'SET_NAT_INSIDE')
             
-        if self._fullsync and out_vlan in self._existing_cfg_dict['interfaces']:
+        if self._fullsync and int(out_vlan) in self._existing_cfg_dict['interfaces']:
             LOG.debug("Skip cfg for existing 'nat outside'")
             pass
         else:
@@ -653,7 +653,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vlan = ex_gw_port['hosting_info']['segmentation_id']
 
         if self._fullsync and floating_ip in self._existing_cfg_dict['static_nat']:
-            LOG.debug("Skip cfg for existing floating IP")
+            LOG.info("Skip cfg for existing floating IP")
             return
         
         confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)

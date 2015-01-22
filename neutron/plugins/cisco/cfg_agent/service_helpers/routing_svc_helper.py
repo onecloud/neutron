@@ -706,7 +706,8 @@ class PhyRouterContext(RoutingServiceHelper):
         if router_db_info is None:
             router_db_info = self._fetch_router_info(all_routers=True)
         driver = self._drivermgr.get_driver(None)
-        driver.delete_invalid_cfg(router_db_info)
+        existing_cfg_dict = driver.delete_invalid_cfg(router_db_info)
+        return existing_cfg_dict
 
     def prepare_fullsync(self, existing_cfg_dict):
         driver = self._drivermgr.get_driver(None)
