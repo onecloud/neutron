@@ -567,7 +567,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #acl_present = self._check_acl(acl_no, network, netmask, asr_ent)
         #if not acl_present:
         try:
-            if self._fullsync and in_vlan in self.existing_cfg_dict['acls']:
+            if self._fullsync and in_vlan in self._existing_cfg_dict['acls']:
                 LOG.debug("Skip cfg for existing ACL")
                 pass
             else:
@@ -578,7 +578,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.error("CREATE_ACL error")
 
         try:
-            if self._fullsync and in_vlan in self.existing_cfg_dict['dyn_nat']:
+            if self._fullsync and in_vlan in self._existing_cfg_dict['dyn_nat']:
                 LOG.debug("Skip cfg for existing dynamic NAT rule")
                 pass
             else:
@@ -589,7 +589,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         except:
             LOG.error("DYN NAT error")
 
-        if self._fullsync and in_vlan in self.existing_cfg_dict['interfaces']:
+        if self._fullsync and in_vlan in self._existing_cfg_dict['interfaces']:
             LOG.debug("Skip cfg for existing 'nat inside'")
             pass
         else:
@@ -597,7 +597,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'SET_NAT_INSIDE')
             
-        if self._fullsync and out_vlan in self.existing_cfg_dict['interfaces']:
+        if self._fullsync and out_vlan in self._existing_cfg_dict['interfaces']:
             LOG.debug("Skip cfg for existing 'nat outside'")
             pass
         else:
@@ -652,7 +652,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         conn = self._get_connection(asr_ent)
         vlan = ex_gw_port['hosting_info']['segmentation_id']
 
-        if self._fullsync and floating_ip in self.existing_cfg_dict['static_nat']:
+        if self._fullsync and floating_ip in self._existing_cfg_dict['static_nat']:
             LOG.debug("Skip cfg for existing floating IP")
             return
         
