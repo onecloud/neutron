@@ -476,7 +476,7 @@ class ConfigSyncer(object):
                 delete_acl_list.append(acl.text)
                 continue
 
-            self.existing_cfg_dict['acls'] = acl
+            self.existing_cfg_dict['acls'][segment_id] = acl
             
         for acl_cfg in delete_acl_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (acl_cfg))
