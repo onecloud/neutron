@@ -709,11 +709,11 @@ class PhyRouterContext(RoutingServiceHelper):
         driver.delete_invalid_cfg(router_db_info)
 
     def prepare_fullsync(self, existing_cfg_dict):
-        driver = self.drivermgr.get_driver(None)
+        driver = self._drivermgr.get_driver(None)
         driver.prepare_fullsync(existing_cfg_dict)
 
     def clear_fullsync(self):
-        driver = self.drivermgr.get_driver(None)
+        driver = self._drivermgr.get_driver(None)
         driver.clear_fullsync()
 
     def process_service(self, device_ids=None, removed_devices_info=None):

@@ -862,7 +862,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._intfs_enabled = True
 
                 # set timeout in seconds for synchronous netconf requests
-                asr_conn.timeout = 6 
+                asr_conn.timeout = 12
                 
                 if self._err_listener is not None:
                     asr_conn._session.add_listener(self._err_listener)
