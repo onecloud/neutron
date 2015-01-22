@@ -29,7 +29,7 @@ HSRP_REGEX = "\s*standby (\d+) .*"
 
 SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)"
 
-NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_(\d+) interface Port-channel(\d+)\.(\d+) vrf " + NROUTER_REGEX + " overload"
+NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_" + DEP_ID_REGEX + "_(\d+) interface Port-channel(\d+)\.(\d+) vrf " + NROUTER_REGEX + " overload"
 
 ACL_REGEX = "ip access-list standard neutron_acl_" + DEP_ID_REGEX + "_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
@@ -359,13 +359,16 @@ class ConfigSyncer(object):
         for nat_rule in nat_overloads:
             LOG.info("\nnat overload rule: %s" % (nat_rule))
             match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
-            segment_id, intf_num, intf_segment_id, router_id, dep_id = match_obj.group(1,2,3,4,5)
+            acl_dep_id, segment_id, intf_num, intf_segment_id, router_id, dep_id = match_obj.group(1,2,3,4,5,6)
             
             segment_id = int(segment_id)
             intf_num = int(intf_num)
             intf_segment_id = int(intf_segment_id)
             
-             # Check deployment_id
+            if acl_dep_id != dep_id:
+                delete_nat_list.append(nat_rule.text)
+
+            # Check deployment_id
             if dep_id != self.dep_id:
                 if dep_id not in self.other_dep_ids:
                     delete_nat_list.append(nat_rule.text) # no one owns this, delete
