@@ -473,12 +473,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _asr_add_default_route_v6(self, ri, gw_ip, gw_port):
         vrf_name = self._csr_get_vrf_name(ri)
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
-        self._add_default_static_route_v6(gw_ip, vrf_name, self.target_asr, subinterface)
+        self._add_default_static_route_v6(gw_ip, vrf_name, subinterface)
 
     def _asr_remove_default_route_v6(self, ri, gw_ip, gw_port):
         vrf_name = self._csr_get_vrf_name(ri)
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
-        self._remove_default_static_route_v6(gw_ip, vrf_name, self.target_asr, subinterface)
+        self._remove_default_static_route_v6(gw_ip, vrf_name, subinterface)
 
     def _add_default_static_route_v6(self, gw_ip, vrf, out_intf):
         conn = self._get_connection()
