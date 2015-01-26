@@ -288,7 +288,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         priority = asr_ent['order']
         subinterface = self._get_interface_name_from_hosting_port(port)
 
-        self._set_ha_HSRP_v6(subinterface, priority, group, asr_ent, is_external)
+        self._set_ha_HSRP_v6(subinterface, priority, group, is_external)
 
 
     def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
@@ -411,13 +411,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         dest_mask = destination_net.netmask
         next_hop = route['nexthop']
 
-        for asr_ent in self._get_asr_list():
-            if action is 'replace':
-                self._add_static_route(dest, dest_mask, next_hop, vrf_name)
-            elif action is 'delete':
-                self._remove_static_route(dest, dest_mask, next_hop, vrf_name)
-            else:
-                LOG.error(_('Unknown route command %s'), action)
+        if action is 'replace':
+            self._add_static_route(dest, dest_mask, next_hop, vrf_name)
+        elif action is 'delete':
+            self._remove_static_route(dest, dest_mask, next_hop, vrf_name)
+        else:
+            LOG.error(_('Unknown route command %s'), action)
 
     def _csr_create_vrf(self, ri):
         vrf_name = self._csr_get_vrf_name(ri)
