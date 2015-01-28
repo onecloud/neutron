@@ -1120,9 +1120,13 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         return router_updated
 
     def _process_sync_data(self, routers, interfaces, floating_ips, ha_gw_interfaces= []):
+        # begin benchmarking 
+        start_time = time.time()
+
         routers_dict = {}
         for router in routers:
             routers_dict[router['id']] = router
+
         for floating_ip in floating_ips:
             router = routers_dict.get(floating_ip['router_id'])
             if router:
@@ -1144,6 +1148,12 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                 router_interfaces.append(interface)
                 router[l3_constants.HA_GW_KEY] = router_interfaces
 
+        # end benchmarking
+        current_time = time.time()
+        elapsed_time = current_time - start_time
+
+        LOG.error("*** elapsed time for _process_sync_data routers, %s" % \
+                  (elapsed_time))
         return routers_dict.values()
 
 
