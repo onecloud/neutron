@@ -1243,29 +1243,45 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         """
         # cache of hosting port information: {mac_addr: {'name': port_name}}
         hosting_pdata = {}
+        network_cache_dict = {}
                         
         if router['external_gateway_info'] is not None:
             self._get_hosting_info_for_port_no_vm(context, 
                                                   router['id'], router['gw_port'],
-                                                  hosting_pdata)
+                                                  hosting_pdata,
+                                                  network_cache_dict)
 
         for itfc in router.get(l3_constants.INTERFACE_KEY, []):
             self._get_hosting_info_for_port_no_vm(context,
                                                   router['id'], itfc, 
-                                                  hosting_pdata)
+                                                  hosting_pdata,
+                                                  network_cache_dict)
         
         for itfc in router.get(l3_constants.HA_GW_KEY, []):
             self._get_hosting_info_for_port_no_vm(context,
                                                   router['id'], itfc, 
-                                                  hosting_pdata)
+                                                  hosting_pdata,
+                                                  network_cache_dict)
 
-    def _get_hosting_info_for_port_no_vm(self, context, router_id, port, hosting_pdata):
-        port_db = self._core_plugin._get_port(context, port['id'])
-        tags = self._core_plugin.get_networks(context,
-                                              {'id': [port_db['network_id']]},
-                                              [pr_net.SEGMENTATION_ID])
-        allocated_vlan = (None if tags == []
-                          else tags[0].get(pr_net.SEGMENTATION_ID))
+    def _get_hosting_info_for_port_no_vm(self, context, router_id, port, hosting_pdata, network_cache_dict):
+        if port['network_id'] not in network_cache_dict:
+            network = self._core_plugin.get_networks(context,
+                                                     {'id': port['network_id']})
+            if len(network) < 1:
+                allocated_vlan = None
+            else:
+                network_cache_dict[port['network_id']] = network[0]
+                allocated_vlan = network[0].get(pr_net.SEGMENTATION_ID)
+        else:
+            network = network_cache_dict[port['network_id']]
+            allocated_vlan = network.get(pr_net.SEGMENTATION_ID)
+
+        #port_db = self._core_plugin._get_port(context, port['id'])
+        #tags = self._core_plugin.get_networks(context,
+        #                                      {'id': [port_db['network_id']]},
+        #                                      [pr_net.SEGMENTATION_ID])
+        #allocated_vlan = (None if tags == []
+        #                 else tags[0].get(pr_net.SEGMENTATION_ID))
 
         if hosting_pdata.get('mac') is None:
             hosting_pdata['mac'] = "mac_placeholder"
