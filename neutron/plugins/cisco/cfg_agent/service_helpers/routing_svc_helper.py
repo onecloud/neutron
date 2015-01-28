@@ -117,7 +117,8 @@ class CiscoRoutingPluginApi(proxy.RpcProxy):
                                        host=self.host,
                                        router_ids=router_ids,
                                        hosting_device_ids=hd_ids),
-                         topic=self.topic)
+                         topic=self.topic,
+                         timeout=180)
 
     def agent_heartbeat(self, context):
         """Make a remote process call to check connectivity between
