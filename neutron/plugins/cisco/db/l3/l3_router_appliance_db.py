@@ -1250,11 +1250,12 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             start_time = time.time()
 
             LOG.info("TIMING DATA for get_sync_data_ext")
+            network_cache_dict = {}
             for router in sync_data:
                 loop_start_time = time.time()
                 self._add_type_and_hosting_device_info(context, router)
                 add_type_time = time.time()
-                self._add_hosting_port_info(context, router, None)
+                self._add_hosting_port_info(context, router, None, network_cache_dict)
                 add_host_port_time = time.time()
 
                 LOG.info(" per router time, type_time: %s, host_port_time: %s" % (add_type_time - loop_start_time, add_host_port_time - loop_start_time))
@@ -1296,7 +1297,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         router['hosting_device'] = self._get_router_info_for_agent(router)
         return
 
-    def _add_hosting_port_info(self, context, router, plugging_driver):
+    def _add_hosting_port_info(self, context, router, plugging_driver, network_cache_dict):
         """Adds hosting port information to router ports.
 
         We only populate hosting port info, i.e., reach here, if the
@@ -1305,7 +1306,6 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         """
         # cache of hosting port information: {mac_addr: {'name': port_name}}
         hosting_pdata = {}
-        network_cache_dict = {}
                         
         if router['external_gateway_info'] is not None:
             self._get_hosting_info_for_port_no_vm(context, 
