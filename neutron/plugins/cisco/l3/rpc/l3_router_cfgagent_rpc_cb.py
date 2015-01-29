@@ -21,6 +21,8 @@ from neutron.extensions import portbindings
 from neutron.openstack.common import jsonutils
 from neutron.openstack.common import log as logging
 
+import time
+
 LOG = logging.getLogger(__name__)
 
 
@@ -46,16 +48,37 @@ class L3RouterCfgRpcCallbackMixin(object):
             router_ids = kwargs.get('router_ids')  #
             hosting_device_ids = kwargs.get('hostiing_device_ids') #
 
+            LOG.info("TIMING DATA for sync_routers")
+            start_time = time.time()
+            
             routers = (
                 self._l3plugin.list_active_sync_routers_on_hosting_devices(
                     context, host, router_ids, hosting_device_ids))
+
+            cur_time = time.time()
+            LOG.info("list_active_sync_routers time: %s" % (cur_time - start_time))
+
         except AttributeError:
             routers = []
+
+        cur_time = time.time()
+
         if routers and utils.is_extension_supported(
                 self._core_plugin, constants.PORT_BINDING_EXT_ALIAS):
             self._ensure_host_set_on_ports(context, host, routers)
+
+        cur_time2 = time.time()
+        LOG.info("ensure_host_set_on_ports time: %s" % (cur_time2 - cur_time))
+        cur_time = cur_time2
+
         LOG.debug('Routers returned to Cisco cfg agent@%(agt)s:\n %(routers)s',
                   {'agt': host, 'routers': jsonutils.dumps(routers, indent=5)})
+                     
+        cur_time2 = time.time()
+        LOG.info("debug statement time: %s" % (cur_time2 - cur_time))
+
+        LOG.info("total time: %s" % (cur_time2 - start_time))
+
         return routers
 
     def _ensure_host_set_on_ports(self, context, host, routers):

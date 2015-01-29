@@ -41,6 +41,7 @@ from neutron.openstack.common.notifier import api as notifier_api
 from neutron.db import model_base
 import sqlalchemy as sa
 
+import time
 
 LOG = logging.getLogger(__name__)
 
@@ -1160,20 +1161,53 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
     def get_sync_data(self, context, router_ids=None, active=None):
         """Query routers and their related floating_ips, interfaces."""
         with context.session.begin(subtransactions=True):
+            start_time = time.time()
+            cur_time = time.time()
+            LOG.info("TIMING DATA FOR get_sync_data")
             routers = self._get_sync_routers(context,
                                              router_ids=router_ids,
                                              active=active)
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_routers: %ss" % (cur_time2 - cur_time))
+            cur_time = cur_time2
+            
             router_ids = [router['id'] for router in routers]
             floating_ips = self._get_sync_floating_ips(context, router_ids)
+
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_floating_ips: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
+
             interfaces = self.get_sync_interfaces(context, router_ids)
+
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_interfaces normal: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
 
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_interfaces HA: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
             ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
                                                         l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_routers HA_GW: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
+
             gw_interfaces = self.get_sync_interfaces(context, router_ids,
                                                      l3_constants.DEVICE_OWNER_ROUTER_GW)
+
+            cur_time2 = time.time()
+            LOG.info("  _get_sync_interfaces GW: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
 
             # Retrieve physical router port bindings
             all_ha_interfaces = ha_interfaces + ha_gw_interfaces
@@ -1189,10 +1223,18 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
                     phy_router_db = None
 
                 ha_intf['port_binding_db'] = port_binding_db
-                ha_intf['phy_router_db'] = phy_router_db                
+                ha_intf['phy_router_db'] = phy_router_db
+
+            cur_time2 = time.time()
+            LOG.info("  _phy_port_binding: %ss"% (cur_time2 - cur_time))
+            cur_time = cur_time2
+
 
             interfaces += ha_interfaces
             ha_gw_interfaces += gw_interfaces
+
+            cur_time2 = time.time()
+            LOG.info("get_sync_data total time: %s" % (cur_time2 - start_time))
 
         return self._process_sync_data(routers, interfaces, floating_ips, ha_gw_interfaces)
 
@@ -1205,9 +1247,19 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         with context.session.begin(subtransactions=True):
             sync_data = self.get_sync_data(context, router_ids, active)
 
+            start_time = time.time()
+
+            LOG.info("TIMING DATA for get_sync_data_ext")
             for router in sync_data:
+                loop_start_time = time.time()
                 self._add_type_and_hosting_device_info(context, router)
+                add_type_time = time.time()
                 self._add_hosting_port_info(context, router, None)
+                add_host_port_time = time.time()
+
+                LOG.info(" per router time, type_time: %s, host_port_time: %s" % (add_type_time - loop_start_time, add_host_port_time - loop_start_time))
+
+            LOG.info("Total time all loops: %s" % (time.time() - start_time))
 
             return sync_data
 
@@ -1269,20 +1321,25 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         
         for itfc in router.get(l3_constants.HA_GW_KEY, []):
             self._get_hosting_info_for_port_no_vm(context,
-                                                  router['id'], itfc, 
+                                                  router['id'], itfc,
                                                   hosting_pdata,
                                                   network_cache_dict)
 
     def _get_hosting_info_for_port_no_vm(self, context, router_id, port, hosting_pdata, network_cache_dict):
+        LOG.info("Get host info, network_id: %s" % port['network_id'])
         if port['network_id'] not in network_cache_dict:
             network = self._core_plugin.get_networks(context,
-                                                     {'id': port['network_id']})
+                                                     {'id': [port['network_id']]},
+                                                     [pr_net.SEGMENTATION_ID])
+
+            LOG.info("CACHE MISS, network: %s" % (network))
             if len(network) < 1:
                 allocated_vlan = None
             else:
                 network_cache_dict[port['network_id']] = network[0]
                 allocated_vlan = network[0].get(pr_net.SEGMENTATION_ID)
         else:
+            LOG.info("CACHE HIT")
             network = network_cache_dict[port['network_id']]
             allocated_vlan = network.get(pr_net.SEGMENTATION_ID)
 
