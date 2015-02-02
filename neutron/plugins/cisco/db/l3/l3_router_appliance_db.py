@@ -714,6 +714,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         self._db_synced = True
 
     def _create_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
+        context = context.elevated()
         # Create HSRP standby interfaces
         port_list = []
         num_asr = len(self.asr_cfg_info.get_asr_list())
@@ -721,7 +722,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
             for asr_idx in range(0, num_asr):
                 asr_port = self._core_plugin.create_port(context, {
                     'port':
-                    {'tenant_id': subnet['tenant_id'],
+                    {'tenant_id': '', # Hide these ports from non-admin, assign a blank tenant_id
                      'network_id': subnet['network_id'],
                      'fixed_ips': attributes.ATTR_NOT_SPECIFIED,
                      'mac_address': attributes.ATTR_NOT_SPECIFIED,
@@ -751,6 +752,7 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
 
 
     def _delete_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
+        context = context.elevated()
         # Delete HSRP standby interfaces
         port_list = []
         rport_qry = context.session.query(models_v2.Port)
