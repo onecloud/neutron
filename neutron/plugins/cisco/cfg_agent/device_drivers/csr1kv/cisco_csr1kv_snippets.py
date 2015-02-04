@@ -194,11 +194,13 @@ SET_INTC_ASR_HSRP = """
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 
 """
+
+#            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+
 
 #=================================================#
 # Enable HSRP on a External Network Subinterface
@@ -216,7 +218,7 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+            <cmd>standby %s name neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
 
@@ -370,7 +372,7 @@ REMOVE_STATIC_SRC_TRL = """
 SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
 <config>
         <cli-config-data>
-            <cmd>ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s</cmd>
+            <cmd>ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
 

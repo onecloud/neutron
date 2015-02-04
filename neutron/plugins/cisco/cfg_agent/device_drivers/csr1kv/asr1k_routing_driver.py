@@ -193,13 +193,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             return False
 
     def _get_hsrp_grp_num_from_ri(self, ri):
-        ri_name = ri.router_name()[:self.DEV_NAME_LEN]
+        ri_name = ri.router_name()[8:self.DEV_NAME_LEN]
         hsrp_num = int(ri_name, 16) % 191
         hsrp_num += 1064
         return hsrp_num
 
     def _get_hsrp_grp_num_from_net_id(self, network_id):
-        net_id_digits = network_id[:self.DEV_NAME_LEN]
+        net_id_digits = network_id[:6]
         hsrp_num = int(net_id_digits, 16) % 63
         hsrp_num += 1000
         return hsrp_num
@@ -456,7 +456,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if not self._port_needs_config(port):
             return
 
-        # vlan = self._get_interface_vlan_from_hosting_port(port)
+        vlan = self._get_interface_vlan_from_hosting_port(port)
         # group = vlan
         if is_external:
             group = self._get_hsrp_grp_num_from_net_id(port['network_id'])
@@ -469,7 +469,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         
         priority = asr_ent['order']
         subinterface = self._get_interface_name_from_hosting_port(port)
-        self._set_ha_HSRP(subinterface, vrf_name, priority, group, ip, is_external)
+        self._set_ha_HSRP(subinterface, vrf_name, priority, group, vlan, ip, is_external)
 
 
 
@@ -654,23 +654,23 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         IP NAT.
         """
         conn = self._get_connection()
-        # vlan = ex_gw_port['hosting_info']['segmentation_id']
+        vlan = ex_gw_port['hosting_info']['segmentation_id']
         # hsrp_grp = vlan
 
         if self._fullsync and floating_ip in self._existing_cfg_dict['static_nat']:
             LOG.info("Skip cfg for existing floating IP")
             return
         
-        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp)
+        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
 
     def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, hsrp_grp, ex_gw_port):
         conn = self._get_connection()
-        # vlan = ex_gw_port['hosting_info']['segmentation_id']
+        vlan = ex_gw_port['hosting_info']['segmentation_id']
         # hsrp_grp = vlan
 
-        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp)
+        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_STATIC_SRC_TRL' % self.target_asr['name'])
 
@@ -698,15 +698,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_DEFAULT_ROUTE_WITH_INTF' % self.target_asr['name'])
 
-    def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, ip, is_external=False):
+    def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, vlan, ip, is_external=False):
         if is_external is True:
             confstr = snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
                                                              priority, group, ip,
-                                                             group, group, group, group)
+                                                             group, group, group, group, vlan)
         else:
             confstr = snippets.SET_INTC_ASR_HSRP % (subinterface, vrf_name, group,
                                                     priority, group, ip,
-                                                    group, group, group, group)
+                                                    group, group)
 
         action = "%s SET_INTC_HSRP (Group: %s, Priority: % s)" % (self.target_asr['name'], group, priority)
         self._edit_running_config(confstr, action)
