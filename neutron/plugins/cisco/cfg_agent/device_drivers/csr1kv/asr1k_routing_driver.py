@@ -586,9 +586,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 pass
             else:
                 pool_name = "%s_nat_pool" % (vrf_name)
-                confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
-                                                            vrf_name)
-                #confstr = snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
+                #confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
+                #                                            vrf_name)
+                confstr = snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 self._check_response(rpc_obj, '%s CREATE_DYN_NAT' % self.target_asr['name'])
         except:
@@ -631,7 +631,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         try:
             pool_name = "%s_nat_pool" % (vrf_name)
-            #confstr = snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
+            confstr = snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
             self._check_response(rpc_obj, '%s REMOVE_DYN_SRC_TRL_INTFC' % self.target_asr['name'])
         except cfg_exc.CSR1kvConfigException as cse:
             LOG.error("temporary disable REMOVE_DYN_SRC_TRL_INTFC exception handling: %s" % (cse))
