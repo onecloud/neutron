@@ -226,13 +226,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
             subinterface = self._get_interface_name_from_hosting_port(ex_gw_port)
             self._create_ext_subinterface_enable_only(subinterface)
-            self._set_nat_pool(ri, ex_gw_port, False)
 
             if ex_gw_ip:
                 # Set default route via this network's gateway ip
                 if self._is_port_v6(ex_gw_port):
                     self._asr_add_default_route_v6(ri, ex_gw_ip, ex_gw_port)
                 else:
+                    self._set_nat_pool(ri, ex_gw_port, False)
                     self._csr_add_default_route(ri, ex_gw_ip, ex_gw_port)
         
     def external_gateway_removed(self, ri, ex_gw_port):
@@ -243,10 +243,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             if ex_gw_ip and ex_gw_port['device_owner'] == constants.DEVICE_OWNER_ROUTER_GW:
                 # LOG.debug("REMOVE ROUTE PORT %s" % ex_gw_port)
                 # Remove default route via this network's gateway ip
-                self._set_nat_pool(ri, ex_gw_port, True)
                 if self._is_port_v6(ex_gw_port):
                     self._asr_remove_default_route_v6(ri, ex_gw_ip, ex_gw_port)
                 else:
+                    self._set_nat_pool(ri, ex_gw_port, True)
                     self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
 
     def delete_invalid_cfg(self, router_db_info):
@@ -456,15 +456,17 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vrf_name = self._csr_get_vrf_name(ri)
         pool_ip = gw_port['fixed_ips'][0]['ip_address']
         pool_name = "%s_nat_pool" % (vrf_name)
+        pool_net = netaddr.IPNetwork(gw_port['ip_cidr'])
+        #LOG.debug("SET_NAT_POOL pool netmask: %s, gw_port %s" % (pool_net.netmask, gw_port))
         if is_delete:
             confstr = snippets.DELETE_NAT_POOL % (pool_name, 
                                                   pool_ip, pool_ip,
-                                                  vrf_name)
+                                                  pool_net.netmask)
             self._edit_running_config(confstr, '%s DELETE_NAT_POOL' % self.target_asr['name'])
         else:
             confstr = snippets.CREATE_NAT_POOL % (pool_name, 
                                                   pool_ip, pool_ip,
-                                                  vrf_name)
+                                                  pool_net.netmask)
             self._edit_running_config(confstr, '%s CREATE_NAT_POOL' % self.target_asr['name'])
     
     def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, is_external=False):
