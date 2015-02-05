@@ -224,9 +224,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             # Global Router is not aware of Tenant Routers with ext network assigned
             # Thus, default route must be handled per Tenant Router
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
-            asr_ent = self.target_asr
             subinterface = self._get_interface_name_from_hosting_port(ex_gw_port)
             self._create_ext_subinterface_enable_only(subinterface)
+            self._set_nat_pool(ri, ex_gw_port, False)
+
             if ex_gw_ip:
                 # Set default route via this network's gateway ip
                 if self._is_port_v6(ex_gw_port):
@@ -242,6 +243,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             if ex_gw_ip and ex_gw_port['device_owner'] == constants.DEVICE_OWNER_ROUTER_GW:
                 # LOG.debug("REMOVE ROUTE PORT %s" % ex_gw_port)
                 # Remove default route via this network's gateway ip
+                self._set_nat_pool(ri, ex_gw_port, True)
                 if self._is_port_v6(ex_gw_port):
                     self._asr_remove_default_route_v6(ri, ex_gw_ip, ex_gw_port)
                 else:
@@ -449,6 +451,21 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     ###### Internal "Action" Functions ########
+
+    def _set_nat_pool(self, ri, gw_port, is_delete):
+        vrf_name = self._csr_get_vrf_name(ri)
+        pool_ip = gw_port['fixed_ips'][0]['ip_address']
+        pool_name = "%s_nat_pool" % (vrf_name)
+        if is_delete:
+            confstr = snippets.DELETE_NAT_POOL % (pool_name, 
+                                                  pool_ip, pool_ip,
+                                                  vrf_name)
+            self._edit_running_config(confstr, '%s DELETE_NAT_POOL' % self.target_asr['name'])
+        else:
+            confstr = snippets.CREATE_NAT_POOL % (pool_name, 
+                                                  pool_ip, pool_ip,
+                                                  vrf_name)
+            self._edit_running_config(confstr, '%s CREATE_NAT_POOL' % self.target_asr['name'])
     
     def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, is_external=False):
         if is_external is True:
@@ -543,8 +560,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 LOG.info("Skip cfg for existing dynamic NAT rule")
                 pass
             else:
+                pool_name = "%s_nat_pool" % (vrf_name)
                 confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
                                                             vrf_name)
+                #confstr = snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 self._check_response(rpc_obj, '%s CREATE_DYN_NAT' % self.target_asr['name'])
         except:
@@ -586,6 +605,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                        vrf_name)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         try:
+            pool_name = "%s_nat_pool" % (vrf_name)
+            #confstr = snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
             self._check_response(rpc_obj, '%s REMOVE_DYN_SRC_TRL_INTFC' % self.target_asr['name'])
         except cfg_exc.CSR1kvConfigException as cse:
             LOG.error("temporary disable REMOVE_DYN_SRC_TRL_INTFC exception handling: %s" % (cse))
