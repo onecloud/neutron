@@ -192,6 +192,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         else:
             return False
 
+    def _get_hsrp_grp_num_from_ri(self, ri):
+        ri_name = ri.router_name()[:self.DEV_NAME_LEN]
+        hsrp_num = int(ri_name, 16) % 193
+        hsrp_num += 1000
+        return hsrp_num
+        
     ###### Public Functions ########
     def set_err_listener_context(self, phy_context):
         self._err_listener = NetConfErrorListener()
@@ -392,17 +398,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
-        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, ex_gw_port)
+        hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port)
+        hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+
         # First remove NAT from outer interface
         self._remove_interface_nat(out_intfc_name, 'outside')
         #Clear the NAT translation table
         self._remove_dyn_nat_translations()
         #Remove the floating ip
-        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, ex_gw_port)
+        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
         #Enable NAT on outer interface
         self._add_interface_nat(out_intfc_name, 'outside')
 
@@ -439,7 +448,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             return
 
         vlan = self._get_interface_vlan_from_hosting_port(port)
-        group = vlan
+        #group = vlan
+        group = self._get_hsrp_grp_num_from_ri(ri)
+        
         vrf_name = self._csr_get_vrf_name(ri)
 
         asr_ent = self.target_asr
@@ -623,7 +634,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s CLEAR_DYN_NAT_TRANS' % self.target_asr['name'])
 
-    def _add_floating_ip(self, floating_ip, fixed_ip, vrf, ex_gw_port):
+    def _add_floating_ip(self, floating_ip, fixed_ip, vrf, hsrp_grp, ex_gw_port):
         """
         To implement a floating ip, an ip static nat is configured in the underlying router
         ex_gw_port contains data to derive the vlan associated with related subnet for the
@@ -631,21 +642,23 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         IP NAT.
         """
         conn = self._get_connection()
-        vlan = ex_gw_port['hosting_info']['segmentation_id']
+        # vlan = ex_gw_port['hosting_info']['segmentation_id']
+        # hsrp_grp = vlan
 
         if self._fullsync and floating_ip in self._existing_cfg_dict['static_nat']:
             LOG.info("Skip cfg for existing floating IP")
             return
         
-        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)
+        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
 
-    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, ex_gw_port):
+    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, hsrp_grp, ex_gw_port):
         conn = self._get_connection()
-        vlan = ex_gw_port['hosting_info']['segmentation_id']
+        # vlan = ex_gw_port['hosting_info']['segmentation_id']
+        # hsrp_grp = vlan
 
-        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, vlan)
+        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_STATIC_SRC_TRL' % self.target_asr['name'])
 
