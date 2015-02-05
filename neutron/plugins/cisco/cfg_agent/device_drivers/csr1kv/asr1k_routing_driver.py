@@ -194,7 +194,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _get_hsrp_grp_num_from_ri(self, ri):
         ri_name = ri.router_name()[:self.DEV_NAME_LEN]
-        hsrp_num = int(ri_name, 16) % 193
+        hsrp_num = int(ri_name, 16) % 191
+        hsrp_num += 1064
+        return hsrp_num
+
+    def _get_hsrp_grp_num_from_net_id(self, network_id):
+        net_id_digits = network_id[:self.DEV_NAME_LEN]
+        hsrp_num = int(net_id_digits, 16) % 63
         hsrp_num += 1000
         return hsrp_num
         
@@ -398,13 +404,16 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
-        hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+        #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+        hsrp_grp = self._get_hsrp_grp_num_from_net_id(ex_gw_port['network_id'])
+
         self._add_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
 
     def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
         vrf_name = self._csr_get_vrf_name(ri)
         out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port)
-        hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+        #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
+        hsrp_grp = self._get_hsrp_grp_num_from_net_id(ex_gw_port['network_id'])
 
         # First remove NAT from outer interface
         self._remove_interface_nat(out_intfc_name, 'outside')
@@ -447,9 +456,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if not self._port_needs_config(port):
             return
 
-        vlan = self._get_interface_vlan_from_hosting_port(port)
-        #group = vlan
-        group = self._get_hsrp_grp_num_from_ri(ri)
+        # vlan = self._get_interface_vlan_from_hosting_port(port)
+        # group = vlan
+        if is_external:
+            group = self._get_hsrp_grp_num_from_net_id(port['network_id'])
+        else:
+            group = self._get_hsrp_grp_num_from_ri(ri)
         
         vrf_name = self._csr_get_vrf_name(ri)
 
