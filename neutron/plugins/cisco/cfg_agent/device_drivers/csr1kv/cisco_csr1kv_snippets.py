@@ -194,11 +194,13 @@ SET_INTC_ASR_HSRP = """
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 
 """
+
+#            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+
 
 #=================================================#
 # Enable HSRP on a External Network Subinterface
@@ -216,7 +218,7 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+            <cmd>standby %s name neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
 
@@ -278,8 +280,7 @@ SNAT_CFG = "ip nat inside source list %s interface %s vrf %s overload"
 SET_DYN_SRC_TRL_INTFC = """
 <config>
         <cli-config-data>
-            <cmd>ip nat inside source list %s interface %s vrf %s
-            overload</cmd>
+            <cmd>ip nat inside source list %s interface %s vrf %s overload</cmd>
         </cli-config-data>
 </config>
 
@@ -295,8 +296,7 @@ SET_DYN_SRC_TRL_INTFC = """
 REMOVE_DYN_SRC_TRL_INTFC = """
 <config>
         <cli-config-data>
-            <cmd>no ip nat inside source list %s interface %s vrf %s
-            overload</cmd>
+            <cmd>no ip nat inside source list %s interface %s vrf %s overload</cmd>
         </cli-config-data>
 </config>
 
@@ -372,7 +372,7 @@ REMOVE_STATIC_SRC_TRL = """
 SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
 <config>
         <cli-config-data>
-            <cmd>ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s</cmd>
+            <cmd>ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
 
@@ -625,5 +625,67 @@ REMOVE_DEFAULT_ROUTE_V6_WITH_INTF = """
             <cmd>no ipv6 route vrf %s ::/0 %s nexthop-vrf default</cmd>
         </cli-config-data>
 </config>
+"""
+
+#=========================================================================#
+# Set Dynamic source translation with NAT pool
+# Syntax: ip nat inside source list <acl_no> pool <pool_name>
+# .......vrf <vrf_name> overload
+# eg: $(config)ip nat inside source list acl_500
+#    ..........pool nrouter-e7d4y5-pool vrf nrouter-e7d4y5 overload
+#========================================================================#
+SNAT_POOL_CFG = "ip nat inside source list %s pool %s vrf %s overload"
+
+SET_DYN_SRC_TRL_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat inside source list %s pool %s vrf %s overload</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Remove Dynamic source translation with NAT pool
+# Syntax: no ip nat inside source list <acl_no> pool <pool_name>
+# .......vrf <vrf_name> overload
+# eg: $(config)no ip nat inside source list acl_500
+#    ..........pool nrouter-e7d4y5-pool vrf nrouter-e7d4y5 overload
+#========================================================================#
+REMOVE_DYN_SRC_TRL_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat inside source list %s pool %s vrf %s overload</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Create a NAT pool
+# Syntax: ip nat pool <pool_name> <start_ip> <end_ip> netmask <netmask_value>
+# eg: $(config)ip nat pool TEST_POOL 192.168.0.20 192.168.0.35 netmask 255.255.0.0
+#========================================================================#
+CREATE_NAT_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat pool %s %s %s netmask %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Delete a NAT pool
+# Syntax: no ip nat pool <pool_name> <start_ip> <end_ip> netmask <netmask_value>
+# eg: $(config)no ip nat pool TEST_POOL 192.168.0.20 192.168.0.35 netmask 255.255.0.0
+#========================================================================#
+DELETE_NAT_POOL = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat pool %s %s %s netmask %s</cmd>
+        </cli-config-data>
+</config>
+
 """
 
