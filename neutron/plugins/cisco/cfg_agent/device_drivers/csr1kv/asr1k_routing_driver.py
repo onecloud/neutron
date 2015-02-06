@@ -5,6 +5,10 @@ import time
 import xml.etree.ElementTree as ET
 
 import ciscoconfparse
+
+import eventlet
+eventlet.monkey_patch(socket=True, select=True)
+
 from ncclient import manager
 from ncclient import transport as nctransport
 
@@ -811,7 +815,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._intfs_enabled = True
 
                 # set timeout in seconds for synchronous netconf requests
-                asr_conn.timeout = 24
+                asr_conn.timeout = 48
                 
                 if self._err_listener is not None:
                     asr_conn._session.add_listener(self._err_listener)
