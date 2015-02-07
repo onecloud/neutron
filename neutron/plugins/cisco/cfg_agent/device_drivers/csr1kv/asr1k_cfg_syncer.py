@@ -325,7 +325,7 @@ class ConfigSyncer(object):
             gw_segment_id = gw_port['hosting_info']['segmentation_id']
             if segment_id != gw_segment_id:
                 LOG.info("snat segment_id does not match router's gw segment_id, deleting")
-                delete_fip_list.append(snat_rule.text)
+                #delete_fip_list.append(snat_rule.text)
                 continue
             
             # Check that in,out ip pair matches a floating_ip defined on router
@@ -394,7 +394,7 @@ class ConfigSyncer(object):
             ext_intf_segment_id = gw_port['hosting_info']['segmentation_id']
             if ext_intf_segment_id != intf_segment_id:
                 LOG.info("outbound external interface segment_id is wrong, deleting rule")
-                delete_nat_list.append(nat_rule.text)
+                #delete_nat_list.append(nat_rule.text)
                 continue
 
             # Check that router has internal network interface on segment_id
@@ -407,7 +407,7 @@ class ConfigSyncer(object):
                         break
             if intf_match_found is False:
                 LOG.info("router does not have this internal network assigned, deleting rule")
-                delete_nat_list.append(nat_rule.text)
+                #delete_nat_list.append(nat_rule.text)
                 continue
 
 
@@ -491,7 +491,7 @@ class ConfigSyncer(object):
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children(INTF_DESC_REGEX)]
 
-        LOG.info("intf_segment_dict: %s" % (intf_segment_dict))
+        #LOG.info("intf_segment_dict: %s" % (intf_segment_dict))
         pending_delete_list = []
 
         # TODO: split this big function into smaller functions
@@ -571,7 +571,7 @@ class ConfigSyncer(object):
                     pending_delete_list.append(intf)
                     continue
                 if router_id != db_intf["device_id"][0:6]:
-                    LOG.info("Internal network VRF mismatch, deleting intf")
+                    LOG.info("Internal network VRF mismatch, deleting intf, router_id: %s, db_intf_dev_id: %s" % (router_id, db_intf["device_id"]))
                     pending_delete_list.append(intf)
                     continue
 
@@ -623,7 +623,7 @@ class ConfigSyncer(object):
             for hsrp_cfg in hsrp_cfg_list:
                 hsrp_num = int(hsrp_cfg.re_match(HSRP_REGEX, group=1))
                 if hsrp_num != intf.segment_id:
-                    needs_hsrp_delete = True
+                    #needs_hsrp_delete = True
                     del_hsrp_cmd += XML_CMD_TAG % ("no %s" % (hsrp_cfg.text))
             
             if needs_hsrp_delete:
