@@ -481,16 +481,19 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         pool_name = "%s_nat_pool" % (vrf_name)
         pool_net = netaddr.IPNetwork(gw_port['ip_cidr'])
         #LOG.debug("SET_NAT_POOL pool netmask: %s, gw_port %s" % (pool_net.netmask, gw_port))
-        if is_delete:
-            confstr = snippets.DELETE_NAT_POOL % (pool_name, 
-                                                  pool_ip, pool_ip,
-                                                  pool_net.netmask)
-            self._edit_running_config(confstr, '%s DELETE_NAT_POOL' % self.target_asr['name'])
-        else:
-            confstr = snippets.CREATE_NAT_POOL % (pool_name, 
-                                                  pool_ip, pool_ip,
-                                                  pool_net.netmask)
-            self._edit_running_config(confstr, '%s CREATE_NAT_POOL' % self.target_asr['name'])
+        try:
+            if is_delete:
+                confstr = snippets.DELETE_NAT_POOL % (pool_name, 
+                                                      pool_ip, pool_ip,
+                                                      pool_net.netmask)
+                self._edit_running_config(confstr, '%s DELETE_NAT_POOL' % self.target_asr['name'])
+            else:
+                confstr = snippets.CREATE_NAT_POOL % (pool_name, 
+                                                      pool_ip, pool_ip,
+                                                      pool_net.netmask)
+                self._edit_running_config(confstr, '%s CREATE_NAT_POOL' % self.target_asr['name'])
+        except cfg_exc.CSR1kvConfigException as cse:
+            LOG.error("temporary disable NAT_POOL exception handling: %s" % (cse))
     
     def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, is_external=False):
         if is_external is True:
