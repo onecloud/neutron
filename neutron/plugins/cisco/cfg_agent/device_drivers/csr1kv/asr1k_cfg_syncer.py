@@ -271,7 +271,8 @@ class ConfigSyncer(object):
             # Check IPs and netmask
             gw_port = router['gw_port']
             gw_ip = gw_port['fixed_ips'][0]['ip_address']
-            pool_net = netaddr.IPNetwork(gw_port['ip_cidr'])
+            LOG.info("ZZZ GW_PORT %s" % gw_port)
+            pool_net = netaddr.IPNetwork(gw_port['subnet']['cidr'])
             
             if start_ip != gw_ip:
                 LOG.info("start IP for pool does not match, deleting")
@@ -283,8 +284,9 @@ class ConfigSyncer(object):
                 delete_pool_list.append(pool.text)
                 continue
 
-            if netmask != pool_net.netmask:
-                LOG.info("netmask for pool does not match, deleting")
+            if netmask != str(pool_net.netmask):
+                LOG.info("netmask for pool does not match, netmask:%s, pool_netmask:%s, deleting" % (netmask,
+                                                                                                     pool_net.netmask))
                 delete_pool_list.append(pool.text)
                 continue
             
@@ -365,7 +367,7 @@ class ConfigSyncer(object):
         for snat_rule in floating_ip_nats:
             LOG.info("\nstatic nat rule: %s" % (snat_rule))
             match_obj = re.match(SNAT_REGEX, snat_rule.text)
-            inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5)
+            inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5,6)
             segment_id = int(segment_id)
             hsrp_num = int(hsrp_num)
             LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, hsrp_num: %s, segment_id: %s" % (inner_ip,
