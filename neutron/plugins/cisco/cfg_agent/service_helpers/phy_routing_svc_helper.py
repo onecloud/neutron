@@ -13,7 +13,7 @@ from neutron.openstack.common import excutils
 from neutron.openstack.common import log as logging
 
 from neutron.plugins.cisco.cfg_agent import cfg_exceptions
-from neutron.plugins.cisco.cfg_agent.device_drivers import driver_mgr
+from neutron.plugins.cisco.cfg_agent.device_drivers import phy_driver_mgr as driver_mgr
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
 from neutron.plugins.cisco.cfg_agent.service_helpers import routing_svc_helper

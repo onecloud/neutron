@@ -18,7 +18,7 @@ from neutron.db import agents_db
 from neutron.db import common_db_mixin
 from neutron import manager
 from neutron.plugins.cisco.db.l3 import device_handling_db
-from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
+from neutron.plugins.cisco.db.l3 import phy_l3_router_appliance_db
 from neutron.plugins.cisco.l3.rpc import (l3_router_cfgagent_rpc_cb as
                                           l3_router_rpc)
 from neutron.plugins.cisco.l3.rpc import devices_cfgagent_rpc_cb as devices_rpc
@@ -39,7 +39,7 @@ class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
 
 class PhysicalCiscoRouterPlugin(common_db_mixin.CommonDbMixin,
                                 agents_db.AgentDbMixin,
-                                l3_router_appliance_db.PhysicalL3RouterApplianceDBMixin,
+                                phy_l3_router_appliance_db.PhysicalL3RouterApplianceDBMixin,
                                 device_handling_db.DeviceHandlingMixin):
 
     """Implementation of Cisco L3 Router Service Plugin for Neutron.
