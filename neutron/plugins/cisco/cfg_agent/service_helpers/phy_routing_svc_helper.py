@@ -152,6 +152,22 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
         driver = self._drivermgr.get_driver(None)
         driver.clear_fullsync()
 
+    def _router_added(self, router_id, router):
+        """Operations when a router is added.
+
+        Create a new RouterInfo object for this router and add it to the
+        service helpers router_info dictionary.  Then `router_added()` is
+        called on the device driver.
+
+        :param router_id: id of the router
+        :param router: router dict
+        :return: None
+        """
+        ri = RouterInfo(router_id, router)
+        driver = self._drivermgr.set_driver(router)
+        driver.router_added(ri)
+        self.router_info[router_id] = ri
+
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
             LOG.info("Sending heartbeat to ASR")
