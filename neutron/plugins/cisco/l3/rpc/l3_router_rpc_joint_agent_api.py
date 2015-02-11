@@ -99,3 +99,28 @@ class L3RouterJointAgentNotifyAPI(n_rpc.RpcProxy):
                                     {'hosting_data': hosting_data,
                                      'deconfigure': deconfigure}, host,
                                     topic=c_constants.CFG_AGENT)
+
+
+
+class PhysicalL3RouterJointAgentNotifyAPI(L3RouterJointAgentNotifyAPI):
+    """API for plugin to notify Cisco cfg agent."""
+    BASE_RPC_API_VERSION = '1.0'
+
+    def _agent_notification(self, context, method, routers, operation, data):
+        """Notify individual Cisco cfg agents."""
+        admin_context = context.is_admin and context or context.elevated()
+        for router in routers:
+
+            agents = self._l3plugin._get_cfg_agents(admin_context, active=True)
+
+            for agent in agents:
+                LOG.debug('Notify %(agent_type)s at %(topic)s.%(host)s the '
+                          'message %(method)s',
+                          {'agent_type': agent.agent_type,
+                           'topic': c_constants.CFG_AGENT_L3_ROUTING,
+                           'host': agent.host,
+                           'method': method})
+                self.cast(context,
+                          self.make_msg(method, routers=[router['id']]),
+                          topic='%s.%s' % (c_constants.CFG_AGENT_L3_ROUTING,
+                                           agent.host))
