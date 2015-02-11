@@ -26,7 +26,8 @@ LOG = logging.getLogger(__name__)
 
 PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
 
-class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceDBMixin):
+class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceDBMixin,
+                                       l3_db.L3RpcNotifierMixin):
 
 
     @property
