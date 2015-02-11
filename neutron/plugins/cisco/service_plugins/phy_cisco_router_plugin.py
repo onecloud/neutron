@@ -23,6 +23,9 @@ from neutron.plugins.cisco.l3.rpc import (l3_router_cfgagent_rpc_cb as
                                           l3_router_rpc)
 from neutron.plugins.cisco.l3.rpc import devices_cfgagent_rpc_cb as devices_rpc
 from neutron.plugins.common import constants
+from neutron.openstack.common import log as logging
+
+LOG = logging.getLogger(__name__)
 
 class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
                                     l3_router_rpc.L3RouterCfgRpcCallbackMixin,
@@ -36,6 +39,21 @@ class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
     @property
     def _core_plugin(self):
         return manager.NeutronManager.get_plugin()
+    
+    def agent_heartbeat(self, context, **kwargs):
+        """Handle heartbeat from cfg_agent
+
+        @param context: contains user information
+        @param host - originator of callback
+        @return: String with value "OK"
+        """
+        try:
+            host = kwargs.get('host')
+            LOG.debug("Got heartbeat from host: %s" % host)
+        except AttributeError:
+            LOG.error("Received heartbeat without host info")
+
+        return "OK"
 
 class PhysicalCiscoRouterPlugin(common_db_mixin.CommonDbMixin,
                                 agents_db.AgentDbMixin,
