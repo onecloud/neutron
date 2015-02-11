@@ -242,7 +242,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             # Thus, default route must be handled per Tenant Router
             ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
             subinterface = self._get_interface_name_from_hosting_port(ex_gw_port)
-            self._create_ext_subinterface_enable_only(subinterface)
+            vlan_id = self._get_interface_vlan_from_hosting_port(ex_gw_port)
+            if self._fullsync and int(vlan_id) in self._existing_cfg_dict['interfaces']:
+                LOG.info("Subinterface already exists, don't create interface")
+            else:
+                self._create_ext_subinterface_enable_only(subinterface)
 
             if ex_gw_ip:
                 # Set default route via this network's gateway ip
@@ -322,6 +326,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         gateway_ip = gw_ip
         
         vlan = self._get_interface_vlan_from_hosting_port(port)
+        if self._fullsync and int(vlan) in self._existing_cfg_dict['interfaces']:
+            LOG.info("Subinterface already exists, skipping")
+            return
 
         hsrp_ip = port['fixed_ips'][0]['ip_address']
         
@@ -400,6 +407,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _csr_add_default_route(self, ri, gw_ip, gw_port):
         vrf_name = self._csr_get_vrf_name(ri)
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
+        ext_vlan = self._get_interface_vlan_from_hosting_port(gw_port)
+
+        if self._fullsync and int(ext_vlan) in self._existing_cfg_dict['routes']:
+            LOG.info("Default route already exists, skipping")
+            return
+
         self._add_default_static_route(gw_ip, vrf_name, subinterface)
 
     def _csr_remove_default_route(self, ri, gw_ip, gw_port):
@@ -485,6 +498,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         pool_ip = gw_port['fixed_ips'][0]['ip_address']
         pool_name = "%s_nat_pool" % (vrf_name)
         pool_net = netaddr.IPNetwork(gw_port['ip_cidr'])
+        
+        if self._fullsync and pool_ip in self._existing_cfg_dict['pools']:
+            LOG.info("Pool already exists, skipping")
+            return
+
         #LOG.debug("SET_NAT_POOL pool netmask: %s, gw_port %s" % (pool_net.netmask, gw_port))
         try:
             if is_delete:
