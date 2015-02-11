@@ -95,3 +95,37 @@ class RouterHostingDeviceBinding(model_base.BASEV2):
                                   sa.ForeignKey('cisco_hosting_devices.id',
                                                 ondelete='SET NULL'))
     hosting_device = orm.relationship(HostingDevice)
+
+
+
+"""
+ASR1k DB tables
+"""
+
+class CiscoPhysicalRouter(model_base.BASEV2, models_v2.HasId):
+    """Represents a physical cisco router."""
+
+    __tablename__ = 'cisco_phy_routers'
+
+    name = sa.Column(sa.String(255))
+    status = sa.Column(sa.String(16))
+    # other columns TBD
+
+
+class CiscoPhyRouterPortBinding(model_base.BASEV2):
+    """ HSRP interface mappings to physical ASRs """
+
+    __tablename__ = 'cisco_phy_router_port_bindings'
+
+    port_id = sa.Column(sa.String(36),
+                        sa.ForeignKey('ports.id', ondelete="CASCADE"),
+                        primary_key=True)
+
+    subnet_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("subnets.id", ondelete='CASCADE'))
+
+    router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("routers.id", ondelete='CASCADE'))
+
+    phy_router_id = sa.Column(sa.String(36),
+                          sa.ForeignKey("cisco_phy_routers.id", ondelete='CASCADE'))
