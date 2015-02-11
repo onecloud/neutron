@@ -74,23 +74,13 @@ class RouterInfo(object):
         return N_ROUTER_PREFIX + self.router_id
 
 
-class CiscoRoutingPluginApi(n_rpc.RpcProxy):
-    """RoutingServiceHelper(Agent) side of the  routing RPC API."""
-
-    BASE_RPC_API_VERSION = '1.1'
-
-    def __init__(self, topic, host):
-        super(CiscoRoutingPluginApi, self).__init__(
-            topic=topic, default_version=self.BASE_RPC_API_VERSION)
-        self.host = host
-
 class PhyCiscoRoutingPluginApi(n_rpc.RpcProxy):
     """RoutingServiceHelper(Agent) side of the  routing RPC API."""
 
     BASE_RPC_API_VERSION = '1.1'
 
     def __init__(self, topic, host):
-        super(CiscoRoutingPluginApi, self).__init__(
+        super(PhyCiscoRoutingPluginApi, self).__init__(
             topic=topic, default_version=self.BASE_RPC_API_VERSION)
         self.host = host
 
