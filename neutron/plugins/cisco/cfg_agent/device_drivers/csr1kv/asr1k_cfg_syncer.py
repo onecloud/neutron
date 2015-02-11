@@ -365,7 +365,7 @@ class ConfigSyncer(object):
         for snat_rule in floating_ip_nats:
             LOG.info("\nstatic nat rule: %s" % (snat_rule))
             match_obj = re.match(SNAT_REGEX, snat_rule.text)
-            inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5)
+            inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5,6)
             segment_id = int(segment_id)
             hsrp_num = int(hsrp_num)
             LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, hsrp_num: %s, segment_id: %s" % (inner_ip,
