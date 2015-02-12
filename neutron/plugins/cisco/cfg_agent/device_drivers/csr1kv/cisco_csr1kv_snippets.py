@@ -193,7 +193,6 @@ SET_INTC_ASR_HSRP = """
             <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
-            <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
         </cli-config-data>
 </config>
@@ -201,6 +200,7 @@ SET_INTC_ASR_HSRP = """
 """
 
 #            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
+#            <cmd>standby %s preempt</cmd>
 
 
 #=================================================#
@@ -218,13 +218,15 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
-            <cmd>standby %s preempt</cmd>
             <cmd>standby %s timers 1 3</cmd>
             <cmd>standby %s name neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
 
 """
+
+#             <cmd>standby %s preempt</cmd>
+
 
 #=================================================#
 # Remove HSRP on a Subinterface
@@ -686,6 +688,19 @@ DELETE_NAT_POOL = """
 <config>
         <cli-config-data>
             <cmd>no ip nat pool %s %s %s netmask %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
+# Disable HSRP preempt on an interface
+#=================================================#
+REMOVE_INTC_ASR_HSRP_PREEMPT = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>no standby %s preempt</cmd>
         </cli-config-data>
 </config>
 
