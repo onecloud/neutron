@@ -707,7 +707,10 @@ REMOVE_INTC_ASR_HSRP_PREEMPT = """
 """
 
 GET_SHOW_CLOCK = """
-<filter>
+<filter type="subtree">
+    <config-format-text-cmd>
+        <text-filter-spec> | inc FFFFFFFFFFFFFFFF</text-filter-spec>
+    </config-format-text-cmd>    
     <oper-data-format-text-block>
         <exec>show clock</exec>
     </oper-data-format-text-block>
