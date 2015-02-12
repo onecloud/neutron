@@ -1092,7 +1092,9 @@ class PhysicalL3RouterApplianceDBMixin(L3RouterApplianceDBMixin):
         with context.session.begin(subtransactions=True):
             router_created = (super(L3RouterApplianceDBMixin, self).
                               create_router(context, router))
-            self.backlog_router(router_created)  # backlog or start immediatey?
+            # self.backlog_router(router_created)  # backlog or start immediatey?
+            self.l3_cfg_rpc_notifier.routers_updated(context, 
+                                                     [router_created])
         return router_created
 
 
