@@ -190,6 +190,7 @@ SET_INTC_ASR_HSRP = """
             <cmd>interface %s</cmd>
             <cmd>vrf forwarding %s</cmd>
             <cmd>standby version 2</cmd>
+            <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s preempt</cmd>
