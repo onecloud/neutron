@@ -560,13 +560,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             interfaces = self.get_sync_interfaces(context, router_ids)
 
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                     l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+                                                     [l3_constants.DEVICE_OWNER_ROUTER_HA_INTF])
 
             ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                        l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                                                        [l3_constants.DEVICE_OWNER_ROUTER_HA_GW])
 
             gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                     l3_constants.DEVICE_OWNER_ROUTER_GW)
+                                                     [l3_constants.DEVICE_OWNER_ROUTER_GW])
 
             # Retrieve physical router port bindings
             all_ha_interfaces = ha_interfaces + ha_gw_interfaces
