@@ -101,8 +101,15 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
 
                 LOG.info("added new port %s" % (asr_port))
                 port_list.append(asr_port)
+                router_port = l3_db.RouterPort(
+                    router_id=router_id,
+                    port_id=asr_port['id'],
+                    port_type=dev_owner
+                )
+                context.session.add(router_port)
         
             self._bind_hsrp_interfaces_to_router(context, router_id,  port_list)
+            
         
         for port in port_list:
             self.l3_rpc_notifier.routers_updated(
@@ -111,6 +118,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                        'tenant_id': subnet['tenant_id'],
                        'port_id': port['id'],
                        'subnet_id': port['fixed_ips'][0]['subnet_id']}
+
             notifier = n_rpc.get_notifier('network')
             router_event = 'router.interface.create'
             notifier.info(context, router_event,
@@ -182,7 +190,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
         # If no exception has been raised, we're good to go            
         subnet_id = info['subnet_id']
         subnet = self._core_plugin._get_subnet(context, subnet_id)
-        
+
         self._delete_hsrp_interfaces(context, router_id, subnet,
                                      l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
 
@@ -288,6 +296,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                         
                     raise n_exc.BadRequest(resource='router', msg=msg)
 
+                router_port = l3_db.RouterPort(
+                    router_id=PHYSICAL_GLOBAL_ROUTER_ID,
+                    port_id=gw_port['id'],
+                    port_type=l3_constants.DEVICE_OWNER_ROUTER_HA_GW
+                )
+                context.session.add(router_port)
+
             self._bind_hsrp_interfaces_to_router(context, router['id'],  existing_port_list[1:])
 
     def _create_phy_router_gw_port(self, context, router, network_id):
@@ -309,6 +324,14 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             msg = (_('No IPs available for external network %s') %
                    network_id)
             raise n_exc.BadRequest(resource='router', msg=msg)
+
+        with context.session.begin(subtransactions=True):
+            router_port = l3_db.RouterPort(
+                    router_id=PHYSICAL_GLOBAL_ROUTER_ID,
+                    port_id=gw_port['id'],
+                    port_type=l3_constants.DEVICE_OWNER_ROUTER_GW
+                )
+            context.session.add(router_port)
 
         #with context.session.begin(subtransactions=True):
         #    phy_router = self._get_router(context, PHYSICAL_GLOBAL_ROUTER_ID) #db object, not dict
