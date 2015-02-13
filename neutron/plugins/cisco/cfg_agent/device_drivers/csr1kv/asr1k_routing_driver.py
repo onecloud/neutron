@@ -24,12 +24,6 @@ from neutron.common import constants
 
 LOG = logging.getLogger(__name__)
 
-TENANT_HSRP_GRP_RANGE = 1
-TENANT_HSRP_GRP_OFFSET = 1064
-EXT_HSRP_GRP_RANGE = 1
-EXT_HSRP_GRP_OFFSET = 1064
-
-
 ############################################################
 # override some CSR1kv methods to work with physical ASR1k #
 ############################################################
@@ -203,14 +197,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _get_hsrp_grp_num_from_ri(self, ri):
         ri_name = ri.router_name()[8:self.DEV_NAME_LEN]
-        hsrp_num = int(ri_name, 16) % TENANT_HSRP_GRP_RANGE
-        hsrp_num += TENANT_HSRP_GRP_OFFSET
+        hsrp_num = int(ri_name, 16) % asr1k_cfg_syncer.TENANT_HSRP_GRP_RANGE
+        hsrp_num += asr1k_cfg_syncer.TENANT_HSRP_GRP_OFFSET
         return hsrp_num
 
     def _get_hsrp_grp_num_from_net_id(self, network_id):
         net_id_digits = network_id[:6]
-        hsrp_num = int(net_id_digits, 16) % EXT_HSRP_GRP_RANGE
-        hsrp_num += EXT_HSRP_GRP_OFFSET
+        hsrp_num = int(net_id_digits, 16) % asr1k_cfg_syncer.EXT_HSRP_GRP_RANGE
+        hsrp_num += asr1k_cfg_syncer.EXT_HSRP_GRP_OFFSET
         return hsrp_num
         
     ###### Public Functions ########

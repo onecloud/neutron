@@ -8,9 +8,12 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.openstack.common import log as logging
 
-from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import asr1k_routing_driver as asr_driver
-
 LOG = logging.getLogger(__name__)
+
+TENANT_HSRP_GRP_RANGE = 1
+TENANT_HSRP_GRP_OFFSET = 1064
+EXT_HSRP_GRP_RANGE = 1
+EXT_HSRP_GRP_OFFSET = 1064
 
 DEP_ID_REGEX = "(\w{3,3})"
 NROUTER_REGEX = "nrouter-(\w{6,6})-" + DEP_ID_REGEX
@@ -125,14 +128,14 @@ class ConfigSyncer(object):
 
     def _get_hsrp_grp_num_from_router_id(self, router_id):
         router_id_digits = router_id[:6]
-        hsrp_num = int(router_id_digits, 16) % asr_driver.TENANT_HSRP_GRP_RANGE
-        hsrp_num += asr_driver.TENANT_HSRP_GRP_OFFSET
+        hsrp_num = int(router_id_digits, 16) % TENANT_HSRP_GRP_RANGE
+        hsrp_num += TENANT_HSRP_GRP_OFFSET
         return hsrp_num
 
     def _get_hsrp_grp_num_from_net_id(self, network_id):
         net_id_digits = network_id[:6]
-        hsrp_num = int(net_id_digits, 16) % asr_driver.EXT_HSRP_GRP_RANGE
-        hsrp_num += asr_driver.EXT_HSRP_GRP_OFFSET
+        hsrp_num = int(net_id_digits, 16) % EXT_HSRP_GRP_RANGE
+        hsrp_num += EXT_HSRP_GRP_OFFSET
         return hsrp_num
 
     def delete_invalid_cfg(self, conn):
