@@ -8,7 +8,7 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.openstack.common import log as logging
 
-from neutron.plugins.cisco.cfg_agent.device_drivers import asr1k_routing_driver as asr_driver
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import asr1k_routing_driver as asr_driver
 
 LOG = logging.getLogger(__name__)
 
