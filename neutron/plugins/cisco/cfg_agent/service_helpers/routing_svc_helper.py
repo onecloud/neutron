@@ -721,7 +721,8 @@ class PhyRouterContext(RoutingServiceHelper):
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
             LOG.info("Sending heartbeat to ASR")
-            self._drivermgr.get_driver(None).send_empty_cfg()
+            #self._drivermgr.get_driver(None).send_empty_cfg()
+            self._drivermgr.get_driver(None).get_show_clock()
             LOG.debug("Routing service processing started")
             resources = {}
             routers = []

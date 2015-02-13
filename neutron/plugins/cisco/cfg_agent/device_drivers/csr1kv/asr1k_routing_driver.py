@@ -24,10 +24,10 @@ from neutron.common import constants
 
 LOG = logging.getLogger(__name__)
 
-TENANT_HSRP_GRP_RANGE = 191
+TENANT_HSRP_GRP_RANGE = 1
 TENANT_HSRP_GRP_OFFSET = 1064
-EXT_HSRP_GRP_RANGE = 63
-EXT_HSRP_GRP_OFFSET = 1000
+EXT_HSRP_GRP_RANGE = 1
+EXT_HSRP_GRP_OFFSET = 1064
 
 
 ############################################################
@@ -288,6 +288,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         confstr = snippets.EMPTY_SNIPPET
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, snippets.EMPTY_SNIPPET)
+
+    def get_show_clock(self):
+        conn = self._get_connection()
+        filter_str = snippets.GET_SHOW_CLOCK
+        rpc_obj = conn.get(filter=filter_str)
+        LOG.info("show clock resp: %s" % rpc_obj.__dict__)
 
 
     ###### Internal "Preparation" Functions ########

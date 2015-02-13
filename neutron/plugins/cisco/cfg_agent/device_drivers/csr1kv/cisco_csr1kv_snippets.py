@@ -706,3 +706,10 @@ REMOVE_INTC_ASR_HSRP_PREEMPT = """
 
 """
 
+GET_SHOW_CLOCK = """
+<filter>
+    <oper-data-format-text-block>
+        <exec>show clock</exec>
+    </oper-data-format-text-block>
+</filter>
+"""
