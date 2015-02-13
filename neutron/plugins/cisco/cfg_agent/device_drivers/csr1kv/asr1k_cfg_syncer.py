@@ -8,6 +8,8 @@ from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
 from neutron.openstack.common import log as logging
 
+from neutron.plugins.cisco.cfg_agent.device_drivers import asr1k_routing_driver as asr_driver
+
 LOG = logging.getLogger(__name__)
 
 DEP_ID_REGEX = "(\w{3,3})"
@@ -123,14 +125,14 @@ class ConfigSyncer(object):
 
     def _get_hsrp_grp_num_from_router_id(self, router_id):
         router_id_digits = router_id[:6]
-        hsrp_num = int(router_id_digits, 16) % 191
-        hsrp_num += 1064
+        hsrp_num = int(router_id_digits, 16) % asr_driver.TENANT_HSRP_GRP_RANGE
+        hsrp_num += asr_driver.TENANT_HSRP_GRP_OFFSET
         return hsrp_num
 
     def _get_hsrp_grp_num_from_net_id(self, network_id):
         net_id_digits = network_id[:6]
-        hsrp_num = int(net_id_digits, 16) % 63
-        hsrp_num += 1000
+        hsrp_num = int(net_id_digits, 16) % asr_driver.EXT_HSRP_GRP_RANGE
+        hsrp_num += asr_driver.EXT_HSRP_GRP_OFFSET
         return hsrp_num
 
     def delete_invalid_cfg(self, conn):
@@ -271,7 +273,6 @@ class ConfigSyncer(object):
             # Check IPs and netmask
             gw_port = router['gw_port']
             gw_ip = gw_port['fixed_ips'][0]['ip_address']
-            LOG.info("ZZZ GW_PORT %s" % gw_port)
             pool_net = netaddr.IPNetwork(gw_port['subnet']['cidr'])
             
             if start_ip != gw_ip:
