@@ -206,6 +206,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         hsrp_num = int(net_id_digits, 16) % asr1k_cfg_syncer.EXT_HSRP_GRP_RANGE
         hsrp_num += asr1k_cfg_syncer.EXT_HSRP_GRP_OFFSET
         return hsrp_num
+
+    def _get_short_router_id_from_port(self, port):
+        dev_owner = port['device_owner']
+        short_id = dev_owner[:6]
+        return short_id
         
     ###### Public Functions ########
     def set_err_listener_context(self, phy_context):
@@ -413,8 +418,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vrf_name = self._csr_get_vrf_name(ri)
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
         ext_vlan = self._get_interface_vlan_from_hosting_port(gw_port)
+        router_id = self._get_short_router_id_from_port(gw_port)
 
-        if self._fullsync and int(ext_vlan) in self._existing_cfg_dict['routes']:
+        if self._fullsync and router_id in self._existing_cfg_dict['routes']:
             LOG.info("Default route already exists, skipping")
             return
         self._add_default_static_route(gw_ip, vrf_name, subinterface)

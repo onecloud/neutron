@@ -355,7 +355,7 @@ class ConfigSyncer(object):
                 delete_route_list.append(route.text)
                 continue
             
-            self.existing_cfg_dict['routes'][segment_id] = route
+            self.existing_cfg_dict['routes'][router_id] = route
 
         for route_cfg in delete_route_list:
             del_cmd = XML_CMD_TAG % ("no %s" % (route_cfg))
