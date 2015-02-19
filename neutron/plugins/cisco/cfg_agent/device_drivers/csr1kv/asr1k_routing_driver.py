@@ -17,6 +17,8 @@ from oslo.config import cfg
 from neutron.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_snippets as asr_snippets)
+
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (csr1kv_routing_driver as csr1kv_driver)
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import asr1k_cfg_syncer
 
@@ -287,13 +289,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def send_empty_cfg(self):
         conn = self._get_connection()
-        confstr = snippets.EMPTY_SNIPPET
+        confstr = asr_snippets.EMPTY_SNIPPET
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, snippets.EMPTY_SNIPPET)
+        self._check_response(rpc_obj, asr_snippets.EMPTY_SNIPPET)
 
     def get_show_clock(self):
         conn = self._get_connection()
-        filter_str = snippets.GET_SHOW_CLOCK
+        filter_str = asr_snippets.GET_SHOW_CLOCK
         rpc_obj = conn.get(filter=filter_str)
         LOG.info("show clock resp: %s" % rpc_obj.__dict__)
 
@@ -519,12 +521,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         #LOG.debug("SET_NAT_POOL pool netmask: %s, gw_port %s" % (pool_net.netmask, gw_port))
         try:
             if is_delete:
-                confstr = snippets.DELETE_NAT_POOL % (pool_name, 
+                confstr = asr_snippets.DELETE_NAT_POOL % (pool_name, 
                                                       pool_ip, pool_ip,
                                                       pool_net.netmask)
                 self._edit_running_config(confstr, '%s DELETE_NAT_POOL' % self.target_asr['name'])
             else:
-                confstr = snippets.CREATE_NAT_POOL % (pool_name, 
+                confstr = asr_snippets.CREATE_NAT_POOL % (pool_name, 
                                                       pool_ip, pool_ip,
                                                       pool_net.netmask)
                 self._edit_running_config(confstr, '%s CREATE_NAT_POOL' % self.target_asr['name'])
@@ -533,11 +535,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     
     def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, is_external=False):
         if is_external is True:
-            confstr = snippets.CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID % (subinterface,
+            confstr = asr_snippets.CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID % (subinterface,
                                                                         self._asr_config.deployment_id,
                                                                         vlan_id, ip_cidr)
         else:
-            confstr = snippets.CREATE_SUBINTERFACE_V6_WITH_ID % (subinterface,
+            confstr = asr_snippets.CREATE_SUBINTERFACE_V6_WITH_ID % (subinterface,
                                                                  self._asr_config.deployment_id,
                                                                  vlan_id, vrf_name, ip_cidr)
 
@@ -545,7 +547,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _set_ha_HSRP_v6(self, subinterface, priority, group, is_external=False):
 
-        confstr = snippets.SET_INTC_ASR_HSRP_V6 % (subinterface, group, group,
+        confstr = asr_snippets.SET_INTC_ASR_HSRP_V6 % (subinterface, group, group,
                                                    priority, group, group, group, group, group)
         
         action = "%s SET_INTC_HSRP_V6 (Group: %s, Priority: % s)" % (self.target_asr['name'], group, priority)
@@ -563,15 +565,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _add_default_static_route_v6(self, gw_ip, vrf, out_intf):
         conn = self._get_connection()
-        # confstr = snippets.SET_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
-        confstr = snippets.SET_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, gw_ip)
+        # confstr = asr_snippets.SET_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
+        confstr = asr_snippets.SET_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, gw_ip)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s SET_DEFAULT_ROUTE_V6_WITH_INTF' % self.target_asr['name'])
 
     def _remove_default_static_route_v6(self, gw_ip, vrf, out_intf):
         conn = self._get_connection()
-        # confstr = snippets.REMOVE_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
-        confstr = snippets.REMOVE_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, gw_ip)
+        # confstr = asr_snippets.REMOVE_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, out_intf, gw_ip)
+        confstr = asr_snippets.REMOVE_DEFAULT_ROUTE_V6_WITH_INTF % (vrf, gw_ip)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_DEFAULT_ROUTE_V6_WITH_INTF' % self.target_asr['name'])
 
@@ -581,11 +583,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _create_subinterface(self, subinterface, vlan_id, vrf_name, ip, mask, is_external=False):
         if is_external is True:
-            confstr = snippets.CREATE_SUBINTERFACE_EXTERNAL_WITH_ID % (subinterface,
+            confstr = asr_snippets.CREATE_SUBINTERFACE_EXTERNAL_WITH_ID % (subinterface,
                                                                        self._asr_config.deployment_id,
                                                                        vlan_id, ip, mask)
         else:
-            confstr = snippets.CREATE_SUBINTERFACE_WITH_ID % (subinterface,
+            confstr = asr_snippets.CREATE_SUBINTERFACE_WITH_ID % (subinterface,
                                                               self._asr_config.deployment_id,
                                                               vlan_id, vrf_name, ip, mask)
             
@@ -627,7 +629,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 pool_name = "%s_nat_pool" % (vrf_name)
                 #confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
                 #                                            vrf_name)
-                confstr = snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
+                confstr = asr_snippets.SET_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 self._check_response(rpc_obj, '%s CREATE_DYN_NAT' % self.target_asr['name'])
         except:
@@ -670,7 +672,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         rpc_obj = conn.edit_config(target='running', config=confstr)
         try:
             pool_name = "%s_nat_pool" % (vrf_name)
-            confstr = snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
+            confstr = asr_snippets.REMOVE_DYN_SRC_TRL_POOL % (acl_no, pool_name, vrf_name)
             self._check_response(rpc_obj, '%s REMOVE_DYN_SRC_TRL_INTFC' % self.target_asr['name'])
         except cfg_exc.CSR1kvConfigException as cse:
             LOG.error("temporary disable REMOVE_DYN_SRC_TRL_INTFC exception handling: %s" % (cse))
@@ -700,7 +702,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.info("Skip cfg for existing floating IP")
             return
         
-        confstr = snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+        confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
 
@@ -709,7 +711,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vlan = ex_gw_port['hosting_info']['segmentation_id']
         # hsrp_grp = vlan
 
-        confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+        confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_STATIC_SRC_TRL' % self.target_asr['name'])
 
@@ -727,31 +729,31 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _add_default_static_route(self, gw_ip, vrf, out_intf):
         conn = self._get_connection()
-        confstr = snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
+        confstr = asr_snippets.SET_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s SET_DEFAULT_ROUTE_WITH_INTF' % self.target_asr['name'])
 
     def _remove_default_static_route(self, gw_ip, vrf, out_intf):
         conn = self._get_connection()
-        confstr = snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
+        confstr = asr_snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_DEFAULT_ROUTE_WITH_INTF' % self.target_asr['name'])
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, vlan, ip, is_external=False):
 
         try:
-            confstr = snippets.REMOVE_INTC_ASR_HSRP_PREEMPT % (subinterface,
+            confstr = asr_snippets.REMOVE_INTC_ASR_HSRP_PREEMPT % (subinterface,
                                                                group)
             self._edit_running_config(confstr, "REMOVE_HSRP_PREEMPT")
         except:
             pass
 
         if is_external is True:
-            confstr = snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
+            confstr = asr_snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
                                                              priority, group, ip,
                                                              group, group, group, vlan)
         else:
-            confstr = snippets.SET_INTC_ASR_HSRP % (subinterface, vrf_name, group,
+            confstr = asr_snippets.SET_INTC_ASR_HSRP % (subinterface, vrf_name, group,
                                                     priority, group, ip,
                                                     group)
 
@@ -768,7 +770,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _create_vrf(self, vrf_name):
         try:
             conn = self._get_connection()
-            confstr = snippets.CREATE_VRF_DEFN % vrf_name
+            confstr = asr_snippets.CREATE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             if self._check_response(rpc_obj, '%s CREATE_VRF' % self.target_asr['name']):
                 LOG.info(_("VRF %s successfully created"), vrf_name)
@@ -777,7 +779,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _remove_vrf(self, vrf_name):
         conn = self._get_connection()
-        confstr = snippets.REMOVE_VRF_DEFN % vrf_name
+        confstr = asr_snippets.REMOVE_VRF_DEFN % vrf_name
         rpc_obj = conn.edit_config(target='running', config=confstr)
         if self._check_response(rpc_obj, 'REMOVE_VRF'):
             LOG.info(_("VRF %s removed"), vrf_name)
