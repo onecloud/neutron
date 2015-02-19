@@ -37,6 +37,20 @@ class CiscoRouterPluginRpcCallbacks(l3_router_rpc.L3RouterCfgRpcCallbackMixin,
     def create_rpc_dispatcher(self):
         return n_rpc.PluginRpcDispatcher([self])
 
+    def agent_heartbeat(self, context, **kwargs):
+        """Handle heartbeat from cfg_agent
+
+        @param context: contains user information
+        @param host - originator of callback
+        @return: String with value "OK"
+        """
+        try:
+            host = kwargs.get('host')   # ICEHOUSE_BACKPORT
+        except AttributeError:
+            LOG.error("Received heartbeat without host info")
+
+        return "OK"
+
 
 class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
                                 agents_db.AgentDbMixin,

@@ -97,18 +97,3 @@ class L3RouterCfgRpcCallbackMixin(object):
             self._core_plugin.update_port(
                 context, port['id'], {'port': {portbindings.HOST_ID: host}})
 
-
-    def agent_heartbeat(self, context, **kwargs):
-        """Handle heartbeat from cfg_agent
-
-        @param context: contains user information
-        @param host - originator of callback
-        @return: String with value "OK"
-        """
-        context = neutron_context.get_admin_context()
-        try:
-            host = kwargs.get('host')   # ICEHOUSE_BACKPORT
-        except AttributeError:
-            LOG.error("Received heartbeat without host info")
-
-        return "OK"
