@@ -701,6 +701,27 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             self.l3_cfg_rpc_notifier.routers_updated(context,
                                                      scheduled_routers)
 
+    def _get_router_info_for_agent(self, router):
+        """Returns information about <router> needed by config agent.
+
+            Convenience function that service plugins can use to populate
+            their resources with information about the device hosting their
+            logical resource.
+        """
+        LOG.debug("_get_router_info_for_agent router:%s" % router)
+        credentials = {'username': cfg.CONF.hosting_devices.csr1kv_username,
+                       'password': cfg.CONF.hosting_devices.csr1kv_password}
+        #mgmt_ip = (hosting_device.management_port['fixed_ips'][0]['ip_address']
+        #           if hosting_device.management_port else None)
+        mgmt_ip = "1.1.1.1"
+        return {'id': router['id'],
+                'credentials': credentials,
+                'management_ip_address': mgmt_ip,
+                'protocol_port': 443,
+                'created_at': str("AAA"),
+                'booting_time': 10,
+                'cfg_agent_id': 0}
+
 
     def _add_type_and_hosting_device_info(self, context, router,
                                           binding_info=None, schedule=True):

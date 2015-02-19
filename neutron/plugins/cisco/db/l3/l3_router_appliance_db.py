@@ -472,27 +472,6 @@ class L3RouterApplianceDBMixin(extraroute_db.ExtraRoute_db_mixin):
             router['hosting_device'] = self.get_device_info_for_agent(
                 binding_info.hosting_device)
 
-    def _get_router_info_for_agent(self, router):
-        """Returns information about <router> needed by config agent.
-
-            Convenience function that service plugins can use to populate
-            their resources with information about the device hosting their
-            logical resource.
-        """
-        LOG.debug("_get_router_info_for_agent router:%s" % router)
-        credentials = {'username': cfg.CONF.hosting_devices.csr1kv_username,
-                       'password': cfg.CONF.hosting_devices.csr1kv_password}
-        #mgmt_ip = (hosting_device.management_port['fixed_ips'][0]['ip_address']
-        #           if hosting_device.management_port else None)
-        mgmt_ip = "1.1.1.1"
-        return {'id': router['id'],
-                'credentials': credentials,
-                'management_ip_address': mgmt_ip,
-                'protocol_port': 443,
-                'created_at': str("AAA"),
-                'booting_time': 10,
-                'cfg_agent_id': 0}
-
     def _add_hosting_port_info(self, context, router, plugging_driver):
         """Adds hosting port information to router ports.
 
