@@ -6,6 +6,8 @@ from neutron.common import constants
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     cisco_csr1kv_snippets as snippets)
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
+    asr1k_snippets as asr_snippets)
 from neutron.openstack.common import log as logging
 
 LOG = logging.getLogger(__name__)
@@ -230,17 +232,17 @@ class ConfigSyncer(object):
         
         for router_id in del_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
-            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
+            confstr = asr_snippets.REMOVE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
 
         for router_id, dep_id in invalid_routers:
             vrf_name = "nrouter-%s-%s" % (router_id, dep_id)
-            confstr = snippets.REMOVE_VRF_DEFN % vrf_name
+            confstr = asr_snippets.REMOVE_VRF_DEFN % vrf_name
             rpc_obj = conn.edit_config(target='running', config=confstr)
             
         for router_id in add_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
-            confstr = snippets.CREATE_VRF_DEFN % vrf_name
+            confstr = asr_snippets.CREATE_VRF_DEFN % vrf_name
             #rpc_obj = conn.edit_config(target='running', config=confstr)
 
             
