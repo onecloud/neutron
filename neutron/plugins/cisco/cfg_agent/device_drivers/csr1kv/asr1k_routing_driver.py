@@ -270,6 +270,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._set_nat_pool(ri, ex_gw_port, True)
                     self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
 
+
+    def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
+        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
+
     def delete_invalid_cfg(self, router_db_info):
         conn = self._get_connection()
         cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info, 
