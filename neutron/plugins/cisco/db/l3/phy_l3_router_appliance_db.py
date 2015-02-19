@@ -398,7 +398,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             subnets = self._core_plugin._get_subnets_by_network(context,
                                                                 network_id)
             for subnet in subnets:
-                self._check_for_dup_router_subnet(context, router_id,
+                self._check_for_dup_router_subnet(context, router,
                                                   network_id, subnet['id'],
                                                   subnet['cidr'])
 
