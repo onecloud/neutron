@@ -26,7 +26,7 @@ from neutron.extensions import providernet as pr_net
 from neutron.openstack.common import lockutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.common import cisco_constants as c_const
-from neutron.plugins.cisco.l3.rpc import l3_router_rpc_joint_agent_api
+from neutron.plugins.cisco.l3.rpc import asr_l3_router_rpc_joint_agent_api
 from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
 
 from neutron.openstack.common.notifier import api as notifier_api
@@ -77,7 +77,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
     @property
     def l3_cfg_rpc_notifier(self):
         if not hasattr(self, '_l3_cfg_rpc_notifier'):
-            self._l3_cfg_rpc_notifier = (l3_router_rpc_joint_agent_api.
+            self._l3_cfg_rpc_notifier = (asr_l3_router_rpc_joint_agent_api.
                                          PhysicalL3RouterJointAgentNotifyAPI(self))
         return self._l3_cfg_rpc_notifier
 
