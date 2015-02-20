@@ -279,6 +279,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
         self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
 
+    def disable_internal_network_NAT(self, ri, port, ex_gw_port, intf_delete=False):
+        self._csr_remove_internalnw_nat_rules(ri, [port], ex_gw_port, intf_delete)
+
     def delete_invalid_cfg(self, router_db_info):
         conn = self._get_connection()
         cfg_syncer = asr1k_cfg_syncer.ConfigSyncer(router_db_info, 
@@ -387,7 +390,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                             netmask, inner_intfc,
                                             outer_intfc, vrf_name, in_vlan, out_vlan)
 
-    def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
+    def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port, intf_delete=False):
         if self._is_port_v6(ex_port):
             LOG.debug("IPv6 port, no NAT delete needed")
             return
@@ -403,7 +406,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
             acls.append("neutron_acl_%s_%s" % (self._asr_config.deployment_id,
                                                str(inner_vlan)))
-            self._remove_interface_nat(in_intfc_name, 'inside')
+
+            if not intf_delete:
+                self._remove_interface_nat(in_intfc_name, 'inside')
             
             #Wait for two second
             LOG.debug("Sleep for 2 seconds before clearing NAT rules")

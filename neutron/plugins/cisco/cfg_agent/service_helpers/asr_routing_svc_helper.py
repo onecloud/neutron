@@ -168,6 +168,12 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
         driver.router_added(ri)
         self.router_info[router_id] = ri
 
+    def _internal_network_removed(self, ri, port, ex_gw_port):
+        driver = self._drivermgr.get_driver(ri.id)
+        driver.internal_network_removed(ri, port)
+        if ri.snat_enabled and ex_gw_port:
+            driver.disable_internal_network_NAT(ri, port, ex_gw_port, True)
+
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
             LOG.info("Sending heartbeat to ASR")
