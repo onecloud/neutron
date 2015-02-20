@@ -661,7 +661,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         conn = self._get_connection()
         confstr = snippets.SET_NAT % (intfc_name, intfc_type)
         rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, '%s SET_NAT %s' % (self.target_asr_name, intfc_type))
+        self._check_response(rpc_obj, '%s SET_NAT %s' % (self.target_asr['name'], intfc_type))
 
     def _remove_interface_nat(self, intfc_name, intfc_type):
         conn = self._get_connection()
