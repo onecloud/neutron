@@ -19,6 +19,7 @@ import copy
 from oslo.config import cfg
 from neutron.common import constants as l3_constants
 from neutron.common import exceptions as n_exc
+from neutron.common import rpc as n_rpc
 from neutron import context as n_context
 from neutron.db import l3_db
 from neutron.db import models_v2
@@ -28,8 +29,6 @@ from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.common import cisco_constants as c_const
 from neutron.plugins.cisco.l3.rpc import asr_l3_router_rpc_joint_agent_api
 from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
-
-from neutron.openstack.common.notifier import api as notifier_api
 
 from neutron.db import model_base
 import sqlalchemy as sa
@@ -163,12 +162,11 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                        'tenant_id': subnet['tenant_id'],
                        'port_id': port['id'],
                        'subnet_id': port['fixed_ips'][0]['subnet_id']}
-            notifier_api.notify(context,
-                                notifier_api.publisher_id('network'),
-                                'router.interface.create',
-                                notifier_api.CONF.default_notification_level,
-                                {'router_interface': ha_info})
 
+            notifier = n_rpc.get_notifier('network')
+            router_event = 'router.interface.create'
+            notifier.info(context, router_event,
+                          {'router_interface': ha_info})
 
 
     def _delete_hsrp_interfaces(self, context, router_id, subnet, dev_owner):
@@ -202,11 +200,10 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                        'tenant_id': subnet['tenant_id'],
                        'port_id': port['id'],
                        'subnet_id': subnet['id']}
-            notifier_api.notify(context,
-                                notifier_api.publisher_id('network'),
-                                'router.interface.delete',
-                                notifier_api.CONF.default_notification_level,
-                                {'router_interface': ha_info})
+            notifier = n_rpc.get_notifier('network')
+            router_event = 'router.interface.create'
+            notifier.info(context, router_event,
+                          {'router_interface': ha_info})
         
 
     def add_router_interface(self, context, router_id, interface_info):

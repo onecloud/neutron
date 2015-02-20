@@ -1,11 +1,10 @@
-import collections
 import eventlet
-import netaddr
+
+from oslo import messaging
 
 from neutron.common import constants as l3_constants
 from neutron.common import rpc as n_rpc
 from neutron.common import topics
-from neutron.common import utils as common_utils
 from neutron import context as n_context
 from neutron.openstack.common import excutils
 from neutron.openstack.common import log as logging
@@ -14,9 +13,6 @@ from neutron.plugins.cisco.cfg_agent import cfg_exceptions
 from neutron.plugins.cisco.cfg_agent.device_drivers import asr_driver_mgr as driver_mgr
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
-
-from neutron.openstack.common.rpc import proxy  # ICEHOUSE_BACKPORT
-from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1kv_driver)
 from neutron.plugins.cisco.cfg_agent.service_helpers import routing_svc_helper
@@ -75,8 +71,7 @@ class RouterInfo(object):
     def router_name(self):
         return N_ROUTER_PREFIX + self.router_id
 
-# class CiscoRoutingPluginApi(n_rpc.RpcProxy):  # ICEHOUSE_BACKPORT
-class PhyCiscoRoutingPluginApi(proxy.RpcProxy):
+class PhyCiscoRoutingPluginApi(n_rpc.RpcProxy):
     """RoutingServiceHelper(Agent) side of the  routing RPC API."""
 
     BASE_RPC_API_VERSION = '1.1'
@@ -454,7 +449,7 @@ class RoutingServiceHelperWithPhyContext(routing_svc_helper.RoutingServiceHelper
         
         try:
             self.plugin_rpc.agent_heartbeat(self.context)
-        except o_rpc.common.Timeout:
+        except messaging.MessagingTimeout:
             LOG.exception("Server heartbeat timeout")
             self.resync_asrs(self.context)
             return # don't try to configure ASRs, can't get latest DB info
