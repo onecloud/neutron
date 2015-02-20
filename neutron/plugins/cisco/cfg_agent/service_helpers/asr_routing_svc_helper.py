@@ -396,6 +396,71 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 LOG.error(e)
 
 
+    def _process_router_floating_ips(self, ri, ex_gw_port):
+        """Process a router's floating ips.
+
+        Compare current floatingips (in ri.floating_ips) with the router's
+        updated floating ips (in ri.router.floating_ips) and detect
+        flaoting_ips which were added or removed. Notify driver of
+        the change via `floating_ip_added()` or `floating_ip_removed()`.
+
+        :param ri:  RouterInfo object of the router being processed.
+        :param ex_gw_port: Port dict of the external gateway port.
+        :return: None
+        :raises: neutron.plugins.cisco.cfg_agent.cfg_exceptions.DriverException
+        if the configuration operation fails.
+        """
+        floating_ips = ri.router.get(l3_constants.FLOATINGIP_KEY, [])
+        existing_floating_ip_ids = set(
+            [fip['id'] for fip in ri.floating_ips])
+        cur_floating_ip_ids = set([fip['id'] for fip in floating_ips])
+
+        id_to_fip_map = {}
+
+        floating_ip_ids_to_add = []
+        for fip in floating_ips:
+            if fip['port_id']:
+                # store to see if floatingip was remapped
+                id_to_fip_map[fip['id']] = fip
+                if fip['id'] not in existing_floating_ip_ids:
+                    ri.floating_ips.append(fip)
+                    # Ensure that we add only after remove, in case same fixed_ip is
+                    # mapped to different floating_ip within the same loop cycle
+                    # If add occurs before first, cfg will fail because of existing entry
+                    # with identical fixed_ip
+                    floating_ip_ids_to_add.append(fip['id']) 
+
+        floating_ip_ids_to_remove = (existing_floating_ip_ids -
+                                     cur_floating_ip_ids)
+
+        for fip in ri.floating_ips:
+            if fip['id'] in floating_ip_ids_to_remove:
+                ri.floating_ips.remove(fip)
+                self._floating_ip_removed(ri, ri.ex_gw_port,
+                                          fip['floating_ip_address'],
+                                          fip['fixed_ip_address'])
+            elif fip['id'] in floating_ip_ids_to_add:
+                self._floating_ip_added(ri, ex_gw_port,
+                                        fip['floating_ip_address'],
+                                        fip['fixed_ip_address'])
+            else:
+                # handle remapping of a floating IP
+                new_fip = id_to_fip_map[fip['id']]
+                new_fixed_ip = new_fip['fixed_ip_address']
+                existing_fixed_ip = fip['fixed_ip_address']
+                if (new_fixed_ip and existing_fixed_ip and
+                        new_fixed_ip != existing_fixed_ip):
+                    floating_ip = fip['floating_ip_address']
+                    self._floating_ip_removed(ri, ri.ex_gw_port,
+                                              floating_ip,
+                                              existing_fixed_ip)
+                    self._floating_ip_added(ri, ri.ex_gw_port,
+                                            floating_ip, new_fixed_ip)
+                    ri.floating_ips.remove(fip)
+                    ri.floating_ips.append(new_fip)
+
+
+
 
 class RoutingServiceHelperWithPhyContext(routing_svc_helper.RoutingServiceHelper):
 
