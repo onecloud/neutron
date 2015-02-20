@@ -16,7 +16,7 @@ PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
 
 
 class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
-                                    l3_router_rpc.L3RpcCallbackMixin,
+                                    l3_router_rpc.L3RouterCfgRpcCallbackMixin,
                                     devices_rpc.DeviceCfgRpcCallbackMixin):
     RPC_API_VERSION = '1.1'
 
