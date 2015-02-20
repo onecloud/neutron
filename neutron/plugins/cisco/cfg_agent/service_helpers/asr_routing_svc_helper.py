@@ -95,7 +95,7 @@ class PhyCiscoRoutingPluginApi(proxy.RpcProxy):
                         hosting devices will be returned.
         """
         return self.call(context,
-                         self.make_msg('sync_routers',
+                         self.make_msg('cfg_sync_routers',
                                        host=self.host,
                                        router_ids=router_ids,
                                        hosting_device_ids=hd_ids),

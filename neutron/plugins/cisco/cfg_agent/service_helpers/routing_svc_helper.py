@@ -549,7 +549,7 @@ class RoutingServiceHelper():
             if deconfigure:
                 self._process_router(ri)
                 driver = self._drivermgr.get_driver(router_id)
-                driver.router_removed(ri, deconfigure)
+                driver.router_removed(ri)
                 self._drivermgr.remove_driver(router_id)
             del self.router_info[router_id]
             self.removed_routers.discard(router_id)

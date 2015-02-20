@@ -72,7 +72,8 @@ class CiscoPhyRouterPortBinding(model_base.BASEV2):
     phy_router_id = sa.Column(sa.String(36),
                           sa.ForeignKey("cisco_phy_routers.id", ondelete='CASCADE'))
 
-class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceDBMixin):
+class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceDBMixin,
+                                       l3_db.L3RpcNotifierMixin):
 
     @property
     def l3_cfg_rpc_notifier(self):
@@ -145,6 +146,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
 
                 LOG.info("added new port %s" % (asr_port))
                 port_list.append(asr_port)
+                router_port = l3_db.RouterPort(
+                    router_id=router_id,
+                    port_id=asr_port['id'],
+                    port_type=dev_owner
+                )
+                context.session.add(router_port)
+
         
             self._bind_hsrp_interfaces_to_router(context, router_id,  port_list)
         
@@ -335,6 +343,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                                network_id)
                         
                     raise n_exc.BadRequest(resource='router', msg=msg)
+                
+                router_port = l3_db.RouterPort(
+                    router_id=PHYSICAL_GLOBAL_ROUTER_ID,
+                    port_id=gw_port['id'],
+                    port_type=l3_constants.DEVICE_OWNER_ROUTER_HA_GW
+                )
+                context.session.add(router_port)
 
             self._bind_hsrp_interfaces_to_router(context, router['id'],  existing_port_list[1:])
 
@@ -357,6 +372,14 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             msg = (_('No IPs available for external network %s') %
                    network_id)
             raise n_exc.BadRequest(resource='router', msg=msg)
+
+        with context.session.begin(subtransactions=True):
+            router_port = l3_db.RouterPort(
+                    router_id=PHYSICAL_GLOBAL_ROUTER_ID,
+                   port_id=gw_port['id'],
+                    port_type=l3_constants.DEVICE_OWNER_ROUTER_GW
+                )
+            context.session.add(router_port)
 
         #with context.session.begin(subtransactions=True):
         #    phy_router = self._get_router(context, PHYSICAL_GLOBAL_ROUTER_ID) #db object, not dict
@@ -423,7 +446,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             subnets = self._core_plugin._get_subnets_by_network(context,
                                                                 network_id)
             for subnet in subnets:
-                self._check_for_dup_router_subnet(context, router_id,
+                self._check_for_dup_router_subnet(context, router,
                                                   network_id, subnet['id'],
                                                   subnet['cidr'])
 
@@ -603,14 +626,14 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
 
 
             ha_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                     l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+                                                     [l3_constants.DEVICE_OWNER_ROUTER_HA_INTF])
 
             cur_time2 = time.time()
             LOG.info("  _get_sync_interfaces HA: %ss"% (cur_time2 - cur_time))
             cur_time = cur_time2
 
             ha_gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                        l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                                                        [l3_constants.DEVICE_OWNER_ROUTER_HA_GW])
 
             cur_time2 = time.time()
             LOG.info("  _get_sync_routers HA_GW: %ss"% (cur_time2 - cur_time))
@@ -618,7 +641,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
 
 
             gw_interfaces = self.get_sync_interfaces(context, router_ids,
-                                                     l3_constants.DEVICE_OWNER_ROUTER_GW)
+                                                     [l3_constants.DEVICE_OWNER_ROUTER_GW])
 
             cur_time2 = time.time()
             LOG.info("  _get_sync_interfaces GW: %ss"% (cur_time2 - cur_time))
