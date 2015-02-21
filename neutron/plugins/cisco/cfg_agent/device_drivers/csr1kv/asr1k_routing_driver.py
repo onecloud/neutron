@@ -454,13 +454,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         hsrp_grp = self._get_hsrp_grp_num_from_net_id(ex_gw_port['network_id'])
 
         # First remove NAT from outer interface
-        self._remove_interface_nat(out_intfc_name, 'outside')
-        #Clear the NAT translation table
-        self._remove_dyn_nat_translations()
-        #Remove the floating ip
+        # self._remove_interface_nat(out_intfc_name, 'outside')
+        # Clear the NAT translation table
+        # self._remove_dyn_nat_translations()
+        # Remove the floating ip
         self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
-        #Enable NAT on outer interface
-        self._add_interface_nat(out_intfc_name, 'outside')
+        # Enable NAT on outer interface
+        # self._add_interface_nat(out_intfc_name, 'outside')
 
     def _csr_update_routing_table(self, ri, action, route):
         vrf_name = self._csr_get_vrf_name(ri)
