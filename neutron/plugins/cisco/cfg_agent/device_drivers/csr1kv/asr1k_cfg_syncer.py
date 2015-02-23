@@ -665,6 +665,8 @@ class ConfigSyncer(object):
                 if asr_name == self.target_asr_name:
                     target_ip = target_intf['fixed_ips'][0]['ip_address']
                     target_net = netaddr.IPNetwork(target_intf['subnet']['cidr'])
+                    LOG.info("target ip,net: %s,%s, actual ip,net %s,%s" % (target_ip, target_net,
+                                                                            ip_addr, str(target_net.netmask)))
                     if ip_addr != target_ip:
                         LOG.info("Subintf real IP is incorrect, deleting")
                         return False
@@ -687,6 +689,7 @@ class ConfigSyncer(object):
                 if is_external:
                     if target_intf['device_id'] == "PHYSICAL_GLOBAL_ROUTER_ID":
                         target_ip = target_intf['fixed_ips'][0]['ip_address']
+                        LOG.info("target_ip: %s, actual_ip: %s" % (target_ip, ip_addr))
                         if ip_addr != target_ip:
                             LOG.info("HSRP VIP mismatch, deleting")
                             return False
@@ -694,6 +697,7 @@ class ConfigSyncer(object):
                         return True
                 else:
                     target_ip = target_intf['fixed_ips'][0]['ip_address']
+                    LOG.info("target_ip: %s, actual_ip: %s" % (target_ip, ip_addr))
                     if ip_addr != target_ip:
                          LOG.info("HSRP VIP mismatch, deleting")
                          return False
