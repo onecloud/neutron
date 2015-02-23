@@ -34,6 +34,9 @@ DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
 HSRP_REGEX = "\s*standby (\d+) .*"
 
+INTF_V4_ADDR_REGEX = "\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+
 SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
 
 NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
@@ -61,7 +64,7 @@ def is_port_v6(port):
 
 class ConfigSyncer(object):
 
-    def __init__(self, router_db_info, my_dep_id, other_dep_ids):
+    def __init__(self, router_db_info, my_dep_id, other_dep_ids, target_asr_name):
         router_id_dict, interface_segment_dict, segment_nat_dict = self.process_routers_data(router_db_info)
         self.router_id_dict = router_id_dict
         self.intf_segment_dict = interface_segment_dict
@@ -69,6 +72,7 @@ class ConfigSyncer(object):
         self.dep_id = my_dep_id
         self.other_dep_ids = other_dep_ids
         self.existing_cfg_dict = {}
+        self.target_asr_name = target_asr_name
         self.existing_cfg_dict['interfaces'] = {}
         self.existing_cfg_dict['dyn_nat'] = {}
         self.existing_cfg_dict['static_nat'] = {}
@@ -647,7 +651,57 @@ class ConfigSyncer(object):
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Delete ACL: %s" % del_cmd)
             rpc_obj = conn.edit_config(target='running', config=confstr)
-            
+
+    def subintf_real_ip_check(self, intf_list, is_external, ip_addr, netmask):
+
+        if is_external:
+            target_type = constants.DEVICE_OWNER_ROUTER_HA_GW
+        else:
+            target_type = constants.DEVICE_OWNER_ROUTER_HA_INTF
+
+        for target_intf in intf_list:
+            if target_intf['device_owner'] == target_type:
+                asr_name = target_intf['phy_router_db']['name']
+                if asr_name == self.target_asr_name:
+                    target_ip = target_intf['fixed_ips'][0]['ip_address']
+                    target_net = netaddr.IPNetwork(target_intf['subnet']['cidr'])
+                    if ip_addr != target_ip:
+                        LOG.info("Subintf real IP is incorrect, deleting")
+                        return False
+                    if netmask != str(target_net.netmask):
+                        LOG.info("Subintf has incorrect netmask, deleting")
+                        return False
+
+                    return True
+
+        return False
+
+    def subintf_hsrp_ip_check(self, intf_list, is_external, ip_addr):
+        if is_external:
+            target_type = constants.DEVICE_OWNER_ROUTER_GW
+        else:
+            target_type = constants.DEVICE_OWNER_ROUTER_INTF
+
+        for target_intf in intf_list:
+            if target_intf['device_owner'] == target_type:
+                if is_external:
+                    if target_intf['device_id'] == "PHYSICAL_GLOBAL_ROUTER_ID":
+                        target_ip = target_intf['fixed_ips'][0]['ip_address']
+                        if ip_addr != target_ip:
+                            LOG.info("HSRP VIP mismatch, deleting")
+                            return False
+                        
+                        return True
+                else:
+                    target_ip = target_intf['fixed_ips'][0]['ip_address']
+                    if ip_addr != target_ip:
+                         LOG.info("HSRP VIP mismatch, deleting")
+                         return False
+                         
+                    return True
+        
+        return False
+
 
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):        
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
@@ -782,11 +836,44 @@ class ConfigSyncer(object):
                     #rpc_obj = conn.edit_config(target='running', config=confstr)
                     #intf.nat_type = None
 
+
+            # Check that real IP address is correct
+            ipv4_addr = intf.re_search_children(INTF_V4_ADDR_REGEX)
+            if len(ipv4_addr) < 1:
+                LOG.info("Subintf has no IP address, deleting")
+                pending_delete_list.append(intf)
+                continue
+
+            ipv4_addr_cfg = ipv4_addr[0]
+            match_obj = re.match(INTF_V4_ADDR_REGEX, ipv4_addr_cfg.text)
+            ip_addr, netmask = match_obj.group(1,2)
+                
+            if self.subintf_real_ip_check(intf_segment_dict[intf.segment_id], intf.is_external,
+                                          ip_addr, netmask) == False:
+                pending_delete_list.append(intf)
+                continue                
+
             if intf.is_external:
                 correct_grp_num = self._get_hsrp_grp_num_from_net_id(db_intf['network_id'])
             else:
                 correct_grp_num = self._get_hsrp_grp_num_from_router_id(db_intf['device_id'])
-            
+
+
+            # Check HSRP VIP
+            HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+            hsrp_vip_cfg_list = intf.re_search_children(HSRP_V4_VIP_REGEX)
+            if len(hsrp_vip_cfg_list) < 1:
+                LOG.info("Intferace is missing HSRP VIP, deleting")
+                pending_delete_list.append(intf)
+                continue
+            hsrp_vip_cfg = hsrp_vip_cfg_list[0]
+            match_obj = re.match(HSRP_V4_VIP_REGEX, hsrp_vip_cfg.text)
+            hsrp_vip_grp_num, hsrp_vip = match_obj.group(1,2)
+            if self.subintf_hsrp_ip_check(intf_segment_dict[intf.segment_id], intf.is_external,
+                                          hsrp_vip) == False:
+                pending_delete_list.append(intf)
+                continue
+
             # Delete if there's any hsrp config with wrong group number
             #del_hsrp_cmd = XML_CMD_TAG % (intf.text)
             hsrp_cfg_list = intf.re_search_children(HSRP_REGEX)
