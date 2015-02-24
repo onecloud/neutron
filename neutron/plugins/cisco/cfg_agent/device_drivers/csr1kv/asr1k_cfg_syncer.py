@@ -666,7 +666,7 @@ class ConfigSyncer(object):
                     target_ip = target_intf['fixed_ips'][0]['ip_address']
                     target_net = netaddr.IPNetwork(target_intf['subnet']['cidr'])
                     LOG.info("target ip,net: %s,%s, actual ip,net %s,%s" % (target_ip, target_net,
-                                                                            ip_addr, str(target_net.netmask)))
+                                                                            ip_addr, netmask))
                     if ip_addr != target_ip:
                         LOG.info("Subintf real IP is incorrect, deleting")
                         return False
