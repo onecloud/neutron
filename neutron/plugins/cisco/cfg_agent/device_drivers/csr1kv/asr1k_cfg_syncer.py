@@ -795,7 +795,7 @@ class ConfigSyncer(object):
                     pending_delete_list.append(intf)
                     continue
 
-            self.existing_cfg_dict['interfaces'][intf.segment_id] = intf
+            # self.existing_cfg_dict['interfaces'][intf.segment_id] = intf
 
             # Fix NAT config
             intf_nat_type = intf.re_search_children(INTF_NAT_REGEX)
