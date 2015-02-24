@@ -24,7 +24,7 @@ NROUTER_REGEX = "nrouter-(\w{6,6})-" + DEP_ID_REGEX
 VRF_REGEX = "ip vrf " + NROUTER_REGEX
 VRF_REGEX_NEW = "vrf definition " + NROUTER_REGEX
 
-INTF_REGEX = "interface Port-channel(\d+)\.(\d+)"
+INTF_REGEX_BASE = "interface %s\.(\d+)"
 INTF_DESC_REGEX = "\s*description OPENSTACK_NEUTRON-" + DEP_ID_REGEX + "_INTF"
 VRF_EXT_INTF_REGEX = "\s*ip vrf forwarding .*"
 VRF_INTF_REGEX = "\s*ip vrf forwarding " + NROUTER_REGEX
@@ -41,15 +41,15 @@ SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (
 
 NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-NAT_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_" + DEP_ID_REGEX + "_(\d+) interface Port-channel(\d+)\.(\d+) vrf " + NROUTER_REGEX + " overload"
+NAT_OVERLOAD_REGEX_BASE = "ip nat inside source list neutron_acl_" + DEP_ID_REGEX + "_(\d+) interface %s\.(\d+) vrf " + NROUTER_REGEX + " overload"
 NAT_POOL_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_" + DEP_ID_REGEX + "_(\d+) pool " + NROUTER_REGEX + "_nat_pool vrf " + NROUTER_REGEX + " overload"
 
 ACL_REGEX = "ip access-list standard neutron_acl_" + DEP_ID_REGEX + "_(\d+)"
 ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_REGEX = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 Port-channel(\d+)\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_V6_REGEX = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 Port-channel(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
+DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 %s(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
@@ -64,7 +64,7 @@ def is_port_v6(port):
 
 class ConfigSyncer(object):
 
-    def __init__(self, router_db_info, my_dep_id, other_dep_ids, target_asr_name):
+    def __init__(self, router_db_info, my_dep_id, other_dep_ids, target_asr_name, target_intf_name):
         router_id_dict, interface_segment_dict, segment_nat_dict = self.process_routers_data(router_db_info)
         self.router_id_dict = router_id_dict
         self.intf_segment_dict = interface_segment_dict
@@ -79,6 +79,14 @@ class ConfigSyncer(object):
         self.existing_cfg_dict['acls'] = {}
         self.existing_cfg_dict['routes'] = {}
         self.existing_cfg_dict['pools'] = {}
+        self.init_regex(target_intf_name)
+
+    def init_regex(self, target_intf_name):
+        escape_name = re.escape(target_intf_name)
+        self.INTF_REGEX = INTF_REGEX_BASE % escape_name
+        self.NAT_OVERLOAD_REGEX = NAT_OVERLOAD_REGEX_BASE % escape_name
+        self.DEFAULT_ROUTE_REGEX = DEFAULT_ROUTE_REGEX_BASE % escape_name
+        self.DEFAULT_ROUTE_V6_REGEX = DEFAULT_ROUTE_V6_REGEX_BASE % escape_name
 
     def process_routers_data(self, routers):
         router_id_dict = {}
@@ -176,9 +184,9 @@ class ConfigSyncer(object):
         self.clean_nat_pool_overload(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_nat_pool(conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict,
-                                 parsed_cfg, DEFAULT_ROUTE_REGEX)
+                                 parsed_cfg, self.DEFAULT_ROUTE_REGEX)
         self.clean_default_route(conn, router_id_dict, intf_segment_dict, segment_nat_dict,
-                                 parsed_cfg, DEFAULT_ROUTE_V6_REGEX)
+                                 parsed_cfg, self.DEFAULT_ROUTE_V6_REGEX)
         self.clean_acls(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_interfaces(conn, intf_segment_dict, segment_nat_dict, parsed_cfg)
         self.clean_vrfs(conn, router_id_dict, parsed_cfg)
@@ -272,6 +280,12 @@ class ConfigSyncer(object):
                 else:
                     continue # some other deployment owns this route, don't touch
 
+            # Check that VRF exists in openstack DB info
+            if router_id not in router_id_dict:
+                LOG.info("router not found for NAT pool, deleting")
+                delete_pool_list.append(pool.text)
+                continue
+
             # Check that router has external network
             router = router_id_dict[router_id]
             if "gw_port" not in router:
@@ -318,13 +332,11 @@ class ConfigSyncer(object):
         for route in default_routes:
             LOG.info("\ndefault route: %s" % (route))
             match_obj = re.match(route_regex, route.text)
-            router_id, dep_id, intf_num, segment_id, next_hop = match_obj.group(1,2,3,4,5)
+            router_id, dep_id, segment_id, next_hop = match_obj.group(1,2,3,4)
             segment_id = int(segment_id)
-            intf_num = int(intf_num)
-            LOG.info("    router_id: %s, intf_num: %s, segment_id: %s, next_hop: %s" % (router_id,
-                                                                                        intf_num,
-                                                                                        segment_id,
-                                                                                        next_hop))
+            LOG.info("    router_id: %s, segment_id: %s, next_hop: %s" % (router_id,
+                                                                          segment_id,
+                                                                          next_hop))
 
             # Check deployment_id
             if dep_id != self.dep_id:
@@ -520,14 +532,13 @@ class ConfigSyncer(object):
     # For 'interface' style NAT overload, was previously used but not anymore
     def clean_nat_overload(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
         delete_nat_list = []
-        nat_overloads = parsed_cfg.find_objects(NAT_OVERLOAD_REGEX)
+        nat_overloads = parsed_cfg.find_objects(self.NAT_OVERLOAD_REGEX)
         for nat_rule in nat_overloads:
             LOG.info("\nnat overload rule: %s" % (nat_rule))
-            match_obj = re.match(NAT_OVERLOAD_REGEX, nat_rule.text)
-            acl_dep_id, segment_id, intf_num, intf_segment_id, router_id, dep_id = match_obj.group(1,2,3,4,5,6)
+            match_obj = re.match(self.NAT_OVERLOAD_REGEX, nat_rule.text)
+            acl_dep_id, segment_id, intf_segment_id, router_id, dep_id = match_obj.group(1,2,3,4,5)
             
             segment_id = int(segment_id)
-            intf_num = int(intf_num)
             intf_segment_id = int(intf_segment_id)
             
             if acl_dep_id != dep_id:
@@ -717,9 +728,8 @@ class ConfigSyncer(object):
         # TODO: split this big function into smaller functions
         for intf in runcfg_intfs:
             LOG.info("\nOpenstack interface: %s" % (intf))
-            intf.intf_num = int(intf.re_match(INTF_REGEX, group=1))
-            intf.segment_id = int(intf.re_match(INTF_REGEX, group=2))
-            LOG.info("  num: %s  segment_id: %s" % (intf.intf_num, intf.segment_id))
+            intf.segment_id = int(intf.re_match(self.INTF_REGEX, group=1))
+            LOG.info("  segment_id: %s" % (intf.segment_id))
 
             # Delete any interfaces where config doesn't match DB
             # Correct config will be added after clearing invalid cfg
