@@ -59,3 +59,6 @@ def downgrade():
     op.drop_table('cisco_phy_router_port_bindings')
     op.drop_table('cisco_phy_routers')
     ### end Alembic commands ###
+
+if __name__ == "__main__":
+    upgrade()
