@@ -265,11 +265,16 @@ class ConfigSyncer(object):
                     continue
                 else:
                     continue # some other deployment owns this route, don't touch
-
+            
+            
             # Check that router has external network
-            router = router_id_dict[router_id]
-            if "gw_port" not in router:
-                LOG.info("router has no gw_port, pool is invalid, deleting")
+            try:
+                router = router_id_dict[router_id]
+                if "gw_port" not in router:
+                    LOG.info("router has no gw_port, pool is invalid, deleting")
+                    delete_pool_list.append(pool.text)
+                    continue
+            except KeyError:
                 delete_pool_list.append(pool.text)
                 continue
                         

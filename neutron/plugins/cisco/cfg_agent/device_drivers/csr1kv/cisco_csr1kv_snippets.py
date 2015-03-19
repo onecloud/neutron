@@ -193,7 +193,7 @@ SET_INTC_ASR_HSRP = """
             <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
-            <cmd>standby %s timers 1 3</cmd>
+            <cmd>standby %s timers 3 10</cmd>
         </cli-config-data>
 </config>
 
@@ -241,7 +241,7 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
-            <cmd>standby %s timers 1 3</cmd>
+            <cmd>standby %s timers 3 10</cmd>
             <cmd>standby %s name neutron-hsrp-grp-%s-%s</cmd>
         </cli-config-data>
 </config>
@@ -655,7 +655,7 @@ SET_INTC_ASR_HSRP_V6 = """
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s preempt</cmd>
             <cmd>standby %s authentication OPEN</cmd>
-            <cmd>standby %s timers 1 3</cmd>
+            <cmd>standby %s timers 3 10</cmd>
             <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
