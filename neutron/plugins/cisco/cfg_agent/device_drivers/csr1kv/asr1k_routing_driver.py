@@ -5,7 +5,6 @@ import time
 import xml.etree.ElementTree as ET
 
 import ciscoconfparse
-
 import eventlet
 eventlet.monkey_patch(socket=True, select=True)
 
@@ -497,8 +496,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vrf_name = self._csr_get_vrf_name(ri)
 
         asr_ent = self.target_asr
-        
-        priority = asr_ent['order']
+
+        # vrrp priority index range [1-255], hsrp range [0-255]
+        priority = asr_ent['order']+1
         subinterface = self._get_interface_name_from_hosting_port(port)
         self._set_ha_HSRP(subinterface, vrf_name, priority, group, vlan, ip, is_external)
 
