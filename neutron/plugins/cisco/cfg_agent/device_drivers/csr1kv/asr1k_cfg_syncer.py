@@ -11,9 +11,9 @@ from neutron.openstack.common import log as logging
 LOG = logging.getLogger(__name__)
 
 TENANT_HSRP_GRP_RANGE = 1
-TENANT_HSRP_GRP_OFFSET = 1064
+TENANT_HSRP_GRP_OFFSET = 10
 EXT_HSRP_GRP_RANGE = 1
-EXT_HSRP_GRP_OFFSET = 1064
+EXT_HSRP_GRP_OFFSET = 10
 
 DEP_ID_REGEX = "(\w{3,3})"
 NROUTER_REGEX = "nrouter-(\w{6,6})-" + DEP_ID_REGEX

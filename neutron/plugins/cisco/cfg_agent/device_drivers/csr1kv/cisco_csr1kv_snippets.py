@@ -199,6 +199,29 @@ SET_INTC_ASR_HSRP = """
 
 """
 
+#=================================================#
+# Enable VRRP on a Subinterface for ASR 
+# $(config)interface GigabitEthernet 2.500
+# $(config)vrf forwarding nrouter-e7d4y5
+# $(config)vrrp delay minimum 30 reload 60
+# $(config)vrrp <group> priority <priority>
+# $(config)vrrp <group> ip <ip>
+#=================================================#
+SET_INTC_ASR_VRRP = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
+            <cmd>vrrp delay minimum 30 reload 60</cmd>
+            <cmd>vrrp %s priority %s</cmd>
+            <cmd>vrrp %s ip %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+
+
 #            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
 #            <cmd>standby %s preempt</cmd>
 
@@ -225,6 +248,27 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
 
 """
 
+#=================================================#
+# Enable VRRP on a External Network Subinterface
+# $(config)interface GigabitEthernet 2.500
+# $(config)vrrp delay minimum 30 reload 60
+# $(config)vrrp <group> priority <priority>
+# $(config)vrrp <group> ip <ip>
+# $(config)vrrp <group> name neutron-hsrp-grp-<group>-<vlan></cmd>
+#=================================================#
+SET_INTC_ASR_VRRP_EXTERNAL = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>vrrp delay minimum 30 reload 60</cmd>
+            <cmd>vrrp %s priority %s</cmd>
+            <cmd>vrrp %s ip %s</cmd>
+            <cmd>vrrp %s name neutron-hsrp-grp-%s-%s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
 #             <cmd>standby %s preempt</cmd>
 
 
@@ -240,6 +284,22 @@ REMOVE_INTC_HSRP = """
             <cmd>interface %s</cmd>
             <cmd>no standby %s</cmd>
             <cmd>no standby version 2</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
+# Remove VRRP on a Subinterface
+# $(config)interface GigabitEthernet 2.500
+# $(config)no standby version 2
+# $(config)no standby <group>
+#=================================================#
+REMOVE_INTC_VRRP = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>no vrrp %s</cmd>
         </cli-config-data>
 </config>
 

@@ -739,28 +739,23 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, vlan, ip, is_external=False):
 
-        try:
-            confstr = snippets.REMOVE_INTC_ASR_HSRP_PREEMPT % (subinterface,
-                                                               group)
-            self._edit_running_config(confstr, "REMOVE_HSRP_PREEMPT")
-        except:
-            pass
-
         if is_external is True:
-            confstr = snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface, group,
-                                                             priority, group, ip,
-                                                             group, group, group, vlan)
+            confstr = snippets.SET_INTC_ASR_VRRP_EXTERNAL % (subinterface,
+                                                             group, priority,
+                                                             group, ip,
+                                                             group, group, vlan)
         else:
-            confstr = snippets.SET_INTC_ASR_HSRP % (subinterface, vrf_name, group,
-                                                    priority, group, ip,
-                                                    group)
+            confstr = snippets.SET_INTC_ASR_VRRP % (subinterface,
+                                                    vrf_name,
+                                                    group, priority,
+                                                    group, ip)
 
-        action = "%s SET_INTC_HSRP (Group: %s, Priority: % s)" % (self.target_asr['name'], group, priority)
+        action = "%s SET_INTC_VRRP (Group: %s, Priority: %s)" % (self.target_asr['name'], group, priority)
         self._edit_running_config(confstr, action)
 
     def _remove_ha_HSRP(self, subinterface, group):
-        confstr = snippets.REMOVE_INTC_HSRP % (subinterface, group)
-        action = ("REMOVE_INTC_HSRP (subinterface:%s, Group:%s)"
+        confstr = snippets.REMOVE_INTC_VRRP % (subinterface, group)
+        action = ("REMOVE_INTC_VRRP (subinterface:%s, Group:%s)"
                   % (subinterface, group))
         self._edit_running_config(confstr, action)
 
