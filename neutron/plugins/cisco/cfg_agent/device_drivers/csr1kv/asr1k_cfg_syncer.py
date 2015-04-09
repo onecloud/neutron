@@ -30,8 +30,7 @@ VRF_EXT_INTF_REGEX_NEW = "\s*vrf forwarding .*"
 VRF_INTF_REGEX_NEW = "\s*vrf forwarding " + NROUTER_REGEX
 DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
-# HSRP_REGEX = "\s*standby (\d+) .*"
-HSRP_REGEX = "\s*vrrp (\d+) .*"
+HSRP_REGEX = "\s*standby (\d+) .*"
 
 SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
 
