@@ -1,5 +1,5 @@
 [gerrit]
-host=review.openstack.org
+host=review.metacloud.in
 port=29418
-project=openstack/neutron.git
-defaultbranch=stable/juno
+project=metacloud/neutron.git
+defaultbranch=mc/2014.1.1
