@@ -34,10 +34,20 @@ DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
 HSRP_REGEX = "\s*standby (\d+) .*"
 
-INTF_V4_ADDR_REGEX = "\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
-HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+# reg-expression pattern for RG interface configuration lines
+INTF_RG_GENERAL_LINE_REGEX ="\s*redundancy .*"
 
+# 1 parameter (rii)
+INTF_RG_RII_LINE_REGEX ="\s*redundancy rii (\d+)"
+
+# 2 parameters (rg_number, virtual gateway ip)
+INTF_RG_VIP_LINE_REGEX ="\s*redundancy group (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) exclusive"
+
+# There are 6 parameters (inside ip, out ip, router-id/vrf, dep_id, hsrp number, segment-id 
 SNAT_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
+
+# there are 6 parameters (inside ip, out ip, router-id/vrf, dep_id, redundancy group, mapping-id
+SNAT_RG_REGEX = "ip nat inside source static (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + " redundancy (\d+) mapping-id (\d+)"
 
 NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
@@ -388,17 +398,26 @@ class ConfigSyncer(object):
         floating_ip_nats = parsed_cfg.find_objects(SNAT_REGEX)
         for snat_rule in floating_ip_nats:
             LOG.info("\nstatic nat rule: %s" % (snat_rule))
-            match_obj = re.match(SNAT_REGEX, snat_rule.text)
-            inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5,6)
-            segment_id = int(segment_id)
-            hsrp_num = int(hsrp_num)
-            LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, hsrp_num: %s, segment_id: %s" % (inner_ip,
+            # match_obj = re.match(SNAT_REGEX, snat_rule.text)
+            match_obj = re.match(SNAT_RG_REGEX, snat_rule.text)
+            # inner_ip, outer_ip, router_id, dep_id, hsrp_num, segment_id = match_obj.group(1,2,3,4,5,6)
+            inner_ip, outer_ip, router_id, dep_id, rg_group, mapping_id = match_obj.group(1,2,3,4,5,6)
+
+            # segment_id = int(segment_id)
+            # hsrp_num = int(hsrp_num)
+            # LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, hsrp_num: %s, segment_id: %s" % (inner_ip,
+            #                                                                                                outer_ip,
+            #                                                                                                router_id,
+            #                                                                                                dep_id,
+            #                                                                                                hsrp_num,
+            #                                                                                                segment_id))
+
+            LOG.info("   in_ip: %s, out_ip: %s, router_id: %s, dep_id: %s, rg_group: %s, mapping_id: %s" % (inner_ip,
                                                                                                             outer_ip,
                                                                                                             router_id,
                                                                                                             dep_id,
-                                                                                                            hsrp_num,
-                                                                                                            segment_id))
-
+                                                                                                            rg_group,
+                                                                                                            mapping_id))
             # Check deployment_id
             if dep_id != self.dep_id:
                 if dep_id not in self.other_dep_ids:
@@ -421,6 +440,9 @@ class ConfigSyncer(object):
                 continue
             
             # Check that hsrp group name is correct
+            """
+            # disabled for RG temporarily
+
             gw_port = router['gw_port']
             gw_net_id = gw_port['network_id']
             gw_hsrp_num = self._get_hsrp_grp_num_from_net_id(gw_net_id)
@@ -435,6 +457,10 @@ class ConfigSyncer(object):
                 delete_fip_list.append(snat_rule.text)
                 continue
             
+            # check that rg number parsed from asr running-config matches current asr deployment
+            # check that mapping-id matches openstack running-config - how to obtain floating-ip PI info
+            """
+
             # Check that in,out ip pair matches a floating_ip defined on router
             if '_floatingips' not in router:
                 LOG.info("Router has no floating IPs defined, snat rule is invalid, deleting")
@@ -719,6 +745,17 @@ class ConfigSyncer(object):
 
 
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):        
+        """
+        interface Port-channel10.115
+            description OPENSTACK_NEUTRON-zzz_INTF
+            encapsulation dot1Q 115
+            vrf forwarding nrouter-82cc5c-zzz
+            ip address 14.14.14.3 255.255.255.0
+            ip nat inside
+            vrrp delay minimum 30 reload 60
+            vrrp 10 ip 14.14.14.1
+            vrrp 10 priority 1
+        """
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children(INTF_DESC_REGEX)]
 
@@ -872,8 +909,21 @@ class ConfigSyncer(object):
             else:
                 correct_grp_num = self._get_hsrp_grp_num_from_router_id(db_intf['device_id'])
 
-
+            # For RG, the following lines
+            rg_cfg_list = intf.re_search_children(INTF_RG_GENERAL_LINE_REGEX)
+            delete_redundant_intf = False 
+            for rg_cfg in rg_cfg_list:
+                LOG.error("rg_cfg = %s " % (rg_cfg))
+                rii_cfg = rg_cfg.re_match(INTF_RG_RII_LINE_REGEX, group=1)
+                if (rii_cfg):
+                    LOG.error("handling rii %s" % (rii_cfg))
+                else:
+                    rg_num = rg_cfg.re_match(INTF_RG_VIP_LINE_REGEX, group=1)
+                    rg_vip = rg_cfg.re_match(INTF_RG_VIP_LINE_REGEX, group=2)
+                    LOG.error("handling rg_num %s rg_vip %s" % (rg_num, rg_vip))
+ 
             # Check HSRP VIP
+            """
             HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
             hsrp_vip_cfg_list = intf.re_search_children(HSRP_V4_VIP_REGEX)
             if len(hsrp_vip_cfg_list) < 1:
@@ -887,9 +937,14 @@ class ConfigSyncer(object):
                                           hsrp_vip) == False:
                 pending_delete_list.append(intf)
                 continue
-
+            """
             # Delete if there's any hsrp config with wrong group number
             #del_hsrp_cmd = XML_CMD_TAG % (intf.text)
+            """
+            hsrp_cfg = <IOSCfgLine # 162 ' vrrp 10 name neutron-hsrp-grp-10-100' (parent is # 156)>
+            """
+            """
+            # disable for now
             hsrp_cfg_list = intf.re_search_children(HSRP_REGEX)
             needs_hsrp_delete = False
             for hsrp_cfg in hsrp_cfg_list:
@@ -905,6 +960,7 @@ class ConfigSyncer(object):
                 #confstr = XML_FREEFORM_SNIPPET % (del_hsrp_cmd)
                 #LOG.info("Deleting bad HSRP config: %s" % (confstr))
                 #rpc_obj = conn.edit_config(target='running', config=confstr)
+            """
 
             self.existing_cfg_dict['interfaces'][intf.segment_id] = intf.text
 

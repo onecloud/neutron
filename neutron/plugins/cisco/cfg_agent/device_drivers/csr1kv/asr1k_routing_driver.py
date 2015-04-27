@@ -39,6 +39,8 @@ class ASR1kConfigInfo(object):
         self._db_synced = False
         self.deployment_id = None
         self.other_dep_ids = []
+        # redundancy group - valid values [1,2]
+        self.rg_group = 0
         self._create_asr_device_dictionary()
         
 
@@ -65,6 +67,13 @@ class ASR1kConfigInfo(object):
                             dep_ids = value[0].split(",")
                             for dep_id in dep_ids:
                                 self.other_dep_ids.append(dep_id.strip())
+                    continue
+                elif parsed_item == 'redundancy_group':
+                    # reading redundancy group configuration
+                    for dev_key, value in parsed_file[parsed_item].items():
+                        if dev_key == 'rg_group':
+                            self.rg_group = int(value[0])
+                            LOG.error("*** rg group = %d " % (self.rg_group))
                     continue
 
                 dev_id, sep, dev_ip = parsed_item.partition(':')
@@ -276,8 +285,13 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._set_nat_pool(ri, ex_gw_port, True)
                     self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
 
-    def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
+    def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip,**kwargs):
+        mapping_id = kwargs.get('mapping_id',None)
+        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip,fixed_ip,mapping_id=mapping_id)
+
+    def floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip,**kwargs):
+        mapping_id = kwargs.get('mapping_id',None)
+        self._csr_remove_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip,mapping_id=mapping_id)
 
     def disable_internal_network_NAT(self, ri, port, ex_gw_port, intf_delete=False):
         self._csr_remove_internalnw_nat_rules(ri, [port], ex_gw_port, intf_delete)
@@ -442,14 +456,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
         self._remove_default_static_route(gw_ip, vrf_name, subinterface)
 
-    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip,**kwargs):
         vrf_name = self._csr_get_vrf_name(ri)
         #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
         hsrp_grp = self._get_hsrp_grp_num_from_net_id(ex_gw_port['network_id'])
 
-        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
+        self._add_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port,**kwargs)
 
-    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip,**kwargs):
         vrf_name = self._csr_get_vrf_name(ri)
         out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port)
         #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
@@ -460,7 +474,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         # Clear the NAT translation table
         #  self._remove_dyn_nat_translations()
         # Remove the floating ip
-        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port)
+        self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp, ex_gw_port, **kwargs)
         # Enable NAT on outer interface
         #  self._add_interface_nat(out_intfc_name, 'outside')
 
@@ -506,10 +520,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vrf_name = self._csr_get_vrf_name(ri)
 
         asr_ent = self.target_asr
-        
-        priority = asr_ent['order']
+
+        # vrrp priority index range [1-255], hsrp range [0-255]
+        priority = asr_ent['order']+1
         subinterface = self._get_interface_name_from_hosting_port(port)
-        self._set_ha_HSRP(subinterface, vrf_name, priority, group, vlan, ip, is_external)
+        # self._set_ha_HSRP(subinterface, vrf_name, priority, group, vlan, ip, is_external)
+        self._set_ha_RG(subinterface, vrf_name, vlan, ip, is_external)
 
 
 
@@ -708,19 +724,35 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if self._fullsync and floating_ip in self._existing_cfg_dict['static_nat']:
             LOG.info("Skip cfg for existing floating IP")
             return
-        
-        confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
 
-    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, hsrp_grp, ex_gw_port):
+        mapping_id = kwargs.get('mapping_id',None)
+        rg_group = self._asr_config.rg_group
+
+        LOG.error("mapping_id=%s, rg_group=%s" % (mapping_id, rg_group)) 
+
+        if (mapping_id is not None and rg_group is not None):
+            confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH_RG % (fixed_ip, floating_ip, vrf, rg_group, mapping_id)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
+        else:
+            LOG.error("Skip cfg for incomplete floating IP configuration.  Mapping ID is None or RG group is None")
+
+    def _remove_floating_ip(self, floating_ip, fixed_ip, vrf, hsrp_grp, ex_gw_port,**kwargs):
         conn = self._get_connection()
         vlan = ex_gw_port['hosting_info']['segmentation_id']
         # hsrp_grp = vlan
+        mapping_id = kwargs.get('mapping_id',None)
+        rg_group = self._asr_config.rg_group
 
-        confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
-        rpc_obj = conn.edit_config(target='running', config=confstr)
-        self._check_response(rpc_obj, '%s REMOVE_STATIC_SRC_TRL' % self.target_asr['name'])
+        LOG.error("mapping_id=%s, rg_group=%s" % (mapping_id, rg_group)) 
+
+        if (mapping_id is not None and rg_group is not None):
+            # confstr = snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+            confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH_RG % (fixed_ip, floating_ip, vrf, rg_group, mapping_id)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+            self._check_response(rpc_obj, '%s REMOVE_STATIC_SRC_TRL' % self.target_asr['name'])
+        else:
+            LOG.error("Skip remove cfg for incomplete floating IP configuration.  Mapping ID is None or RG group is None")
 
     def _add_static_route(self, dest, dest_mask, next_hop, vrf):
         conn = self._get_connection()
@@ -745,6 +777,35 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         confstr = asr_snippets.REMOVE_DEFAULT_ROUTE_WITH_INTF % (vrf, out_intf, gw_ip)
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj, '%s REMOVE_DEFAULT_ROUTE_WITH_INTF' % self.target_asr['name'])
+
+    def _set_ha_RG(self, subinterface, vrf_name, vlan, ip, is_external=False):
+        """
+        Applies the redundancy group (RG) configuration on a subinterface.
+        $(config)interface GigabitEthernet 2.500
+        $(config)vrf forwarding nrouter-e7d4y5
+        $(config)redundancy rii <rii: use vlan as rii>
+        $(config)redundancy group <group-number> ip <ip>
+        """
+        
+        rg_group = self._asr_config.rg_group
+
+        if is_external is True:
+            confstr = asr_snippets.SET_INTC_ASR_RG_EXTERNAL % (subinterface,
+                                                           vlan,
+                                                           rg_group, ip)
+        else:
+            confstr = asr_snippets.SET_INTC_ASR_RG % (subinterface,
+                                                  vrf_name,
+                                                  vlan,
+                                                  rg_group, ip)
+        LOG.error(">>> confstr = %s" % (confstr))
+
+        action = "%s SET_INTC_ASR_RG (rii : %s, rg_group: %s)" % (self.target_asr['name'], vlan, rg_group)
+        self._edit_running_config(confstr, action)
+        
+
+    def _remove_ha_RG(self, subinterface, rg_group):
+        pass
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, vlan, ip, is_external=False):
 

@@ -17,6 +17,7 @@
 import collections
 import eventlet
 import netaddr
+import pprint
 
 from neutron.common import constants as l3_constants
 from neutron.common import rpc as n_rpc
@@ -527,16 +528,19 @@ class RoutingServiceHelper(object):
                     ri.floating_ips.append(fip)
                     self._floating_ip_added(ri, ex_gw_port,
                                             fip['floating_ip_address'],
-                                            fip['fixed_ip_address'])
+                                            fip['fixed_ip_address'],
+                                            mapping_id=fip['mapping_id'])
 
         floating_ip_ids_to_remove = (existing_floating_ip_ids -
                                      cur_floating_ip_ids)
         for fip in ri.floating_ips:
+            LOG.debug("+++++ last router state fip = %s" % (pprint.pformat(fip)))
             if fip['id'] in floating_ip_ids_to_remove:
                 ri.floating_ips.remove(fip)
                 self._floating_ip_removed(ri, ri.ex_gw_port,
                                           fip['floating_ip_address'],
-                                          fip['fixed_ip_address'])
+                                          fip['fixed_ip_address'],
+                                          mapping_id=fip['mapping_id'])
             else:
                 # handle remapping of a floating IP
                 new_fip = id_to_fip_map[fip['id']]
@@ -547,9 +551,11 @@ class RoutingServiceHelper(object):
                     floating_ip = fip['floating_ip_address']
                     self._floating_ip_removed(ri, ri.ex_gw_port,
                                               floating_ip,
-                                              existing_fixed_ip)
+                                              existing_fixed_ip,
+                                              mapping_id=fip['mapping_id'])
                     self._floating_ip_added(ri, ri.ex_gw_port,
-                                            floating_ip, new_fixed_ip)
+                                            floating_ip, new_fixed_ip,
+                                            mapping_id=fip['mapping_id'])
                     ri.floating_ips.remove(fip)
                     ri.floating_ips.append(new_fip)
 
@@ -633,13 +639,21 @@ class RoutingServiceHelper(object):
                 driver.disable_internal_network_NAT(ri, port, ex_gw_port)
         driver.external_gateway_removed(ri, ex_gw_port)
 
-    def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        driver = self._drivermgr.get_driver(ri.id)
-        driver.floating_ip_added(ri, ex_gw_port, floating_ip, fixed_ip)
+    def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip, **kwargs):
+        mapping_id = kwargs.get('mapping_id',None)
+        if (mapping_id is not None):
+            LOG.error(">>>>>>> mapping_id = %s " % (mapping_id))
 
-    def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
         driver = self._drivermgr.get_driver(ri.id)
-        driver.floating_ip_removed(ri, ex_gw_port, floating_ip, fixed_ip)
+        driver.floating_ip_added(ri, ex_gw_port, floating_ip, fixed_ip,mapping_id=mapping_id)
+
+    def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip, **kwargs):
+        mapping_id = kwargs.get('mapping_id',None)
+        if (mapping_id is not None):
+            LOG.error(">>>>>>> mapping_id = %s " % (mapping_id))
+
+        driver = self._drivermgr.get_driver(ri.id)
+        driver.floating_ip_removed(ri, ex_gw_port, floating_ip, fixed_ip, mapping_id=mapping_id)
 
     def _routes_updated(self, ri):
         """Update the state of routes in the router.

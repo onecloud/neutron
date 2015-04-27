@@ -15,6 +15,7 @@
 # @author: Bob Melander, Cisco Systems, Inc.
 
 import copy
+import pprint
 
 from oslo.config import cfg
 from sqlalchemy.orm import exc

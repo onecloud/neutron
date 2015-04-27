@@ -58,6 +58,27 @@ SET_INTC_ASR_HSRP = """
 
 """
 
+#=================================================#
+# Enable RG on a Subinterface for ASR 
+# $(config)interface GigabitEthernet 2.500
+# $(config)vrf forwarding nrouter-e7d4y5
+# $(config)redundancy rii <rii: use vlan as rii>
+# $(config)redundancy group <group-number> ip <ip>
+#=================================================#
+SET_INTC_ASR_RG = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>vrf forwarding %s</cmd>
+            <cmd>redundancy rii %s</cmd>
+            <cmd>redundancy group %s ip %s exclusive</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+
+
 #            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
 #            <cmd>standby %s preempt</cmd>
 
@@ -79,6 +100,23 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s timers 1 3</cmd>
             <cmd>standby %s name neutron-hsrp-grp-%s-%s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=================================================#
+# Enable VRRP on a External Network Subinterface
+# $(config)interface GigabitEthernet 2.500
+# $(config)redundancy rii <rii>
+# $(config)redundancy group <redundancy group> ip <ip> exclusive
+#=================================================#
+SET_INTC_ASR_RG_EXTERNAL = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>redundancy rii %s</cmd>
+            <cmd>redundancy group %s ip %s exclusive</cmd>
         </cli-config-data>
 </config>
 
@@ -113,6 +151,38 @@ REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH = """
 <config>
         <cli-config-data>
             <cmd>no ip nat inside source static %s %s vrf %s redundancy neutron-hsrp-grp-%s-%s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Set Static source translation on an interface
+# Syntax: ip nat inside source static <fixed_ip> <floating_ip>
+# .......vrf <vrf_name> redundancy <hsrp group name> 
+# eg: $(config)ip nat inside source static 192.168.0.1 121.158.0.5
+#    ..........vrf nrouter-e7d4y5 redundancy 1 mapping-id 10000 
+#========================================================================#
+SET_STATIC_SRC_TRL_NO_VRF_MATCH_RG = """
+<config>
+        <cli-config-data>
+            <cmd>ip nat inside source static %s %s vrf %s redundancy %s mapping-id %s</cmd>
+        </cli-config-data>
+</config>
+
+"""
+
+#=========================================================================#
+# Remove Static source translation on an interface
+# Syntax: no ip nat inside source static <fixed_ip> <floating_ip>
+# .......vrf <vrf_name> redundancy <hsrp group name> 
+# eg: $(config)no ip nat inside source static 192.168.0.1 121.158.0.5
+#    ..........vrf nrouter-e7d4y5 redundancy 1 mapping-id 10000 
+#========================================================================#
+REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH_RG = """
+<config>
+        <cli-config-data>
+            <cmd>no ip nat inside source static %s %s vrf %s redundancy %s mapping-id %s</cmd>
         </cli-config-data>
 </config>
 

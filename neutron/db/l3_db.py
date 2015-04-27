@@ -12,6 +12,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+#nh-begin
+import pprint
+#nh-end
+
 import netaddr
 import sqlalchemy as sa
 from sqlalchemy import orm
@@ -74,6 +78,19 @@ class FloatingIP(model_base.BASEV2, models_v2.HasId, models_v2.HasTenant):
     last_known_router_id = sa.Column(sa.String(36))
     status = sa.Column(sa.String(16))
 
+class CiscoRGMappingID(model_base.BASEV2):
+    """
+    static nat (floating ip) port to RG Mapping-ID table.  Mapping-id
+    is used to identify a synchronized resource in RG.
+    A floating ip (static nat entry) can only map to one mapping-id
+    """
+    __tablename__ = "cisco_rg_mapping_id"
+    
+    port_id = sa.Column(sa.String(36),
+                        sa.ForeignKey('ports.id',ondelete='CASCADE'),
+                        nullable=False,
+                        primary_key=True)
+    mapping_id=sa.Column(sa.String(31),nullable=False)
 
 class L3_NAT_db_mixin(l3.RouterPluginBase):
     """Mixin class to add L3/NAT router methods to db_plugin_base_v2."""
@@ -455,6 +472,7 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
                'tenant_id': floatingip['tenant_id'],
                'floating_ip_address': floatingip['floating_ip_address'],
                'floating_network_id': floatingip['floating_network_id'],
+               'floating_port_id' : floatingip['floating_port_id'],
                'router_id': floatingip['router_id'],
                'port_id': floatingip['fixed_port_id'],
                'fixed_ip_address': floatingip['fixed_ip_address'],
@@ -609,6 +627,10 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
         tenant_id = self._get_tenant_id_for_create(context, fip)
         fip_id = uuidutils.generate_uuid()
 
+        LOG.error("**** create_floatingip, context = %s " % (pprint.pformat(context)))
+        LOG.error("**** create_floatingip, floatingip = %s " % (pprint.pformat(floatingip)))
+        LOG.error("**** create_floatingip, fip = %s " % (pprint.pformat(fip)))
+
         f_net_id = fip['floating_network_id']
         if not self._core_plugin._network_is_external(context, f_net_id):
             msg = _("Network %s is not a valid external network") % f_net_id
@@ -647,6 +669,25 @@ class L3_NAT_db_mixin(l3.RouterPluginBase):
             self._update_fip_assoc(context, fip,
                                    floatingip_db, external_port)
             context.session.add(floatingip_db)
+
+            # nh-debug-begin
+            # floating_fixed_ip is a dictioanry with a keys,
+            #   'ip_address' = u'192.168.44.22'
+            #   'subnet_id'='u'd07c67f6-e7b0-4195-a5e4-27ebf520db53'
+            LOG.error("create_floatingip, floating_fixed_ip = %s" % (pprint.pformat(floating_fixed_ip)))
+            
+            subnet_db = self._core_plugin._get_subnet(context, floating_fixed_ip['subnet_id'])
+            if (subnet_db):
+                LOG.error("**** cidr = %s " % (subnet_db['cidr']))
+                host_number = (int(netaddr.IPAddress(floating_fixed_ip['ip_address']).__and__(netaddr.IPNetwork(subnet_db['cidr']).hostmask)))
+                LOG.error("**** host_num = %d " % (host_number))
+
+                rg_mapping_db = CiscoRGMappingID(port_id=external_port['id'],
+                                                 mapping_id=str(host_number))
+                context.session.add(rg_mapping_db)
+
+            # nh-debug-endS
+
 
         router_id = floatingip_db['router_id']
         if router_id:
