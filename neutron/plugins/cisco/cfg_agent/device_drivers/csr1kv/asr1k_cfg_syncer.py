@@ -49,7 +49,10 @@ ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) (\d{1,3}\.\d{1
 
 DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 %s(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
+DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 %s\.(\d+) ([0-9A-Fa-f:]+) nexthop-vrf default"
+
+TENANT_ROUTE_V6_REGEX_BASE = "ipv6 route ([0-9A-Fa-f:\\]+) %s.(\d+) nexthop-vrf " + NROUTER_REGEX
+INTF_V6_ADDR_REGEX = "\s*ipv6 address ([0-9A-Fa-f:\\]+)"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
@@ -87,6 +90,7 @@ class ConfigSyncer(object):
         self.NAT_OVERLOAD_REGEX = NAT_OVERLOAD_REGEX_BASE % escape_name
         self.DEFAULT_ROUTE_REGEX = DEFAULT_ROUTE_REGEX_BASE % escape_name
         self.DEFAULT_ROUTE_V6_REGEX = DEFAULT_ROUTE_V6_REGEX_BASE % escape_name
+        self.TENANT_ROUTE_V6_REGEX = TENANT_ROUTE_V6_REGEX_BASE % escape_name
 
     def process_routers_data(self, routers):
         router_id_dict = {}
@@ -323,8 +327,62 @@ class ConfigSyncer(object):
             LOG.info("Delete pool: %s" % del_cmd)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             
+    def clean_tenant_v6_route(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg):
+        delete_route_list = []
+        tenant_routes = parsed_cfg.find_objects(self.TENANT_ROUTE_V6_REGEX)
+        for route in tenant_routes:
+            LOG.info("tenant route: %s" % (route))
+            match_obj = re.match(self.TENANT_ROUTE_V6_REGEX, route.text)
+            prefix, segment_id, router_id, dep_id = match_obj.group(1,2,3,4)
+            LOG.info("    prefix: %s, segment_id: %s, router_id: %s, segment_id: %s, next_hop: %s" % (prefix,
+                                                                                                      segment_id,
+                                                                                                      router_id,
+                                                                                                      dep_id))
+            # Check deployment_id
+            if dep_id != self.dep_id:
+                if dep_id not in self.other_dep_ids:
+                    delete_route_list.append(route.text) # no one owns this, delete
+                    continue
+                else:
+                    continue # some other deployment owns this route, don't touch
 
-            
+            # Check that VRF exists in openstack DB info
+            if router_id not in router_id_dict:
+                LOG.info("router not found for route, deleting")
+                delete_route_list.append(route.text)
+                continue
+
+            router = router_id_dict[router_id]
+
+            # Check that router has internal network interface on segment_id
+            intf_match_found = False
+            for intf in router['_interfaces']:
+                if intf['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF:
+                    intf_segment_id = intf['hosting_info']['segmentation_id']
+                    if intf_segment_id == segment_id:
+                        intf_match_found = True
+                        break
+
+            if intf_match_found is False:
+                LOG.info("router does not have this internal network assigned, deleting rule")
+                delete_route_list.append(route.text)
+                continue
+
+            db_intf = intf_segment_dict[intf.segment_id][0]
+            target_v6_net = netaddr.IPNetwork(db_intf['subnet']['cidr'])
+            actual_v6_net = netaddr.IPNetwork(prefix)
+            if target_v6_net != actual_v6_net:
+                LOG.info("Tenant route has incorrect prefix, deleting")
+                delete_route_list.append(route.text)
+                continue
+
+        for route_cfg in delete_route_list:
+            del_cmd = XML_CMD_TAG % ("no %s" % (route_cfg))
+            confstr = XML_FREEFORM_SNIPPET % (del_cmd)
+            LOG.info("Delete tenant route: %s" % del_cmd)
+            rpc_obj = conn.edit_config(target='running', config=confstr)
+
+        return
 
     def clean_default_route(self, conn, router_id_dict, intf_segment_dict, segment_nat_dict, parsed_cfg, route_regex):
         delete_route_list = []
@@ -516,7 +574,7 @@ class ConfigSyncer(object):
                         break
             if intf_match_found is False:
                 LOG.info("router does not have this internal network assigned, deleting rule")
-                #delete_nat_list.append(nat_rule.text)
+                delete_nat_list.append(nat_rule.text)
                 continue
 
 
@@ -570,7 +628,7 @@ class ConfigSyncer(object):
             ext_intf_segment_id = gw_port['hosting_info']['segmentation_id']
             if ext_intf_segment_id != intf_segment_id:
                 LOG.info("outbound external interface segment_id is wrong, deleting rule")
-                #delete_nat_list.append(nat_rule.text)
+                delete_nat_list.append(nat_rule.text)
                 continue
 
             # Check that router has internal network interface on segment_id
@@ -583,7 +641,7 @@ class ConfigSyncer(object):
                         break
             if intf_match_found is False:
                 LOG.info("router does not have this internal network assigned, deleting rule")
-                #delete_nat_list.append(nat_rule.text)
+                delete_nat_list.append(nat_rule.text)
                 continue
 
 
@@ -689,6 +747,32 @@ class ConfigSyncer(object):
 
         return False
 
+    def subintf_real_ipv6_check(self, intf_list, is_external, ipv6_addr):
+
+        if is_external:
+            target_type = constants.DEVICE_OWNER_ROUTER_GW
+        else:
+            target_type = constants.DEVICE_OWNER_ROUTER_INTF
+
+        for target_intf in intf_list:
+            if target_intf['device_owner'] == target_type:
+                asr_name = target_intf['phy_router_db']['name']
+                if asr_name == self.target_asr_name:
+                    target_ip_cidr = target_intf['ip_cidr']
+                    target_v6_net = netaddr.IPNetwork(target_ip_cidr)
+                    actual_v6_net = netaddr.IPNetwork(ipv6_addr)
+
+                    LOG.info("target ip_cidr: %s, actual ip_cidr %s" % (target_ip_cidr,
+                                                                        ipv6_addr))
+
+                    if target_v6_net != actual_v6_net:
+                        LOG.info("Subintf IPv6 addr is incorrect, deleting")
+                        return False
+
+                    return True
+
+        return False
+
     def subintf_hsrp_ip_check(self, intf_list, is_external, ip_addr):
         if is_external:
             target_type = constants.DEVICE_OWNER_ROUTER_GW
@@ -717,8 +801,88 @@ class ConfigSyncer(object):
         
         return False
 
+    # Returns True if interface has correct NAT config
+    def clean_interfaces_nat_check(self, intf, segment_nat_dict):
+        intf_nat_type = intf.re_search_children(INTF_NAT_REGEX)
+        intf_nat_type = self.get_single_cfg(intf_nat_type)
 
-    def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):        
+        if intf_nat_type is not None:
+            intf_nat_type = intf_nat_type.re_match(INTF_NAT_REGEX, group=1)
+            
+        LOG.info("NAT Type: %s" % intf_nat_type)
+
+        intf.nat_type = intf_nat_type
+
+        if segment_nat_dict[intf.segment_id] == True:
+            if intf.is_external:
+                if intf_nat_type != "outside":
+                    nat_cmd = XML_CMD_TAG % (intf.text)
+                    nat_cmd += XML_CMD_TAG % ("ip nat outside")
+                    confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                    LOG.info("NAT type mismatch, should be outside")
+                    return False
+            else:
+                if intf_nat_type != "inside":
+                    nat_cmd = XML_CMD_TAG % (intf.text)
+                    nat_cmd += XML_CMD_TAG % ("ip nat inside")
+                    confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                    LOG.info("NAT type mismatch, should be inside")
+                    return False
+        else:
+            if intf_nat_type is not None:
+                nat_cmd = XML_CMD_TAG % (intf.text)
+                nat_cmd += XML_CMD_TAG % ("no ip nat %s" % (intf_nat_type))
+                confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
+                LOG.info("NAT type mismatch, should have no NAT")
+                return False
+
+        return True
+
+    def clean_interfaces_ipv4_hsrp_check(self, intf, intf_segment_dict):
+        # Check HSRP VIP
+        hsrp_vip_cfg_list = intf.re_search_children(HSRP_V4_VIP_REGEX)
+        if len(hsrp_vip_cfg_list) < 1:
+            LOG.info("Intferace is missing HSRP VIP, deleting")
+            return False
+
+        hsrp_vip_cfg = hsrp_vip_cfg_list[0]
+        match_obj = re.match(HSRP_V4_VIP_REGEX, hsrp_vip_cfg.text)
+        hsrp_vip_grp_num, hsrp_vip = match_obj.group(1,2)
+        return self.subintf_hsrp_ip_check(intf_segment_dict[intf.segment_id],
+                                          intf.is_external,
+                                          hsrp_vip)
+
+    def clean_interfaces_ipv4_check(self, intf, intf_segment_dict):
+        # Check that real IP address is correct
+        ipv4_addr = intf.re_search_children(INTF_V4_ADDR_REGEX)
+        if len(ipv4_addr) < 1:
+            LOG.info("Subintf has no IP address, deleting")
+            return False
+
+        ipv4_addr_cfg = ipv4_addr[0]
+        match_obj = re.match(INTF_V4_ADDR_REGEX, ipv4_addr_cfg.text)
+        ip_addr, netmask = match_obj.group(1,2)
+        
+        return self.subintf_real_ip_check(intf_segment_dict[intf.segment_id],
+                                          intf.is_external,
+                                          ip_addr, netmask)
+
+    def clean_interfaces_ipv6_check(self, intf, intf_segment_dict):
+        # Check that real IP address is correct
+        ipv6_addr = intf.re_search_children(INTF_V6_ADDR_REGEX)
+        if len(ipv6_addr) < 1:
+            LOG.info("Subintf has no IPv6 address, deleting")
+            return False
+
+        ipv6_addr_cfg = ipv6_addr[0]
+        match_obj = re.match(INTF_V6_ADDR_REGEX, ipv6_addr_cfg.text)
+        ipv6_addr = match_obj.group(1)
+
+        return self.subintf_real_ipv6_check(intf_segment_dict[intf.segment_id],
+                                            intf.is_external,
+                                            ipv6_addr)
+
+    def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
                         if obj.re_search_children(INTF_DESC_REGEX)]
 
@@ -774,6 +938,8 @@ class ConfigSyncer(object):
             intf_type = db_intf["device_owner"]
             intf.is_external = (intf_type == constants.DEVICE_OWNER_ROUTER_HA_GW or \
                                 intf_type == constants.DEVICE_OWNER_ROUTER_GW)
+            intf.has_ipv6 = is_port_v6(db_intf)
+
             
             # Check VRF config
             if intf.is_external:
@@ -807,86 +973,26 @@ class ConfigSyncer(object):
 
             # self.existing_cfg_dict['interfaces'][intf.segment_id] = intf
 
-            # Fix NAT config
-            intf_nat_type = intf.re_search_children(INTF_NAT_REGEX)
-            intf_nat_type = self.get_single_cfg(intf_nat_type)
-
-            if intf_nat_type is not None:
-                intf_nat_type = intf_nat_type.re_match(INTF_NAT_REGEX, group=1)
-            
-            LOG.info("NAT Type: %s" % intf_nat_type)
-
-            intf.nat_type = intf_nat_type
-
-            if segment_nat_dict[intf.segment_id] == True:
-                if intf.is_external:
-                    if intf_nat_type != "outside":
-                        nat_cmd = XML_CMD_TAG % (intf.text)
-                        nat_cmd += XML_CMD_TAG % ("ip nat outside")
-                        confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                        LOG.info("NAT type mismatch, should be outside")
-                        pending_delete_list.append(intf)
-                        continue
-                        #rpc_obj = conn.edit_config(target='running', config=confstr)
-                        #intf.nat_type = "outside"
-                else:
-                    if intf_nat_type != "inside":
-                        nat_cmd = XML_CMD_TAG % (intf.text)
-                        nat_cmd += XML_CMD_TAG % ("ip nat inside")
-                        confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                        LOG.info("NAT type mismatch, should be inside")
-                        pending_delete_list.append(intf)
-                        continue
-                        #rpc_obj = conn.edit_config(target='running', config=confstr)
-                        #intf.nat_type = "inside"
-            else:
-                if intf_nat_type is not None:
-                    nat_cmd = XML_CMD_TAG % (intf.text)
-                    nat_cmd += XML_CMD_TAG % ("no ip nat %s" % (intf_nat_type))
-                    confstr = XML_FREEFORM_SNIPPET % (nat_cmd)
-                    LOG.info("NAT type mismatch, should have no NAT")
-                    pending_delete_list.append(intf)
-                    continue
-                    #rpc_obj = conn.edit_config(target='running', config=confstr)
-                    #intf.nat_type = None
-
-
-            # Check that real IP address is correct
-            ipv4_addr = intf.re_search_children(INTF_V4_ADDR_REGEX)
-            if len(ipv4_addr) < 1:
-                LOG.info("Subintf has no IP address, deleting")
-                pending_delete_list.append(intf)
-                continue
-
-            ipv4_addr_cfg = ipv4_addr[0]
-            match_obj = re.match(INTF_V4_ADDR_REGEX, ipv4_addr_cfg.text)
-            ip_addr, netmask = match_obj.group(1,2)
-                
-            if self.subintf_real_ip_check(intf_segment_dict[intf.segment_id], intf.is_external,
-                                          ip_addr, netmask) == False:
-                pending_delete_list.append(intf)
-                continue                
-
             if intf.is_external:
                 correct_grp_num = self._get_hsrp_grp_num_from_net_id(db_intf['network_id'])
             else:
                 correct_grp_num = self._get_hsrp_grp_num_from_router_id(db_intf['device_id'])
+            
+            if intf.has_ipv6 == False:
+                if self.clean_interfaces_nat_check(intf, segment_nat_dict) == False:
+                    pending_delete_list.append(intf)
+                    continue
+                if self.clean_interfaces_ipv4_check(intf, intf_segment_dict) == False:
+                    pending_delete_list.append(intf)
+                    continue
+                if self.clean_interfaces_ipv4_hsrp_check(intf, intf_segment_dict) == False:
+                    pending_delete_list.append(intf)
+                    continue
+            else:
+                if self.clean_interfaces_ipv6_check(intf, intf_segment_dict) == False:
+                    pending_delete_list.append(intf)
+                    continue
 
-
-            # Check HSRP VIP
-            HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
-            hsrp_vip_cfg_list = intf.re_search_children(HSRP_V4_VIP_REGEX)
-            if len(hsrp_vip_cfg_list) < 1:
-                LOG.info("Intferace is missing HSRP VIP, deleting")
-                pending_delete_list.append(intf)
-                continue
-            hsrp_vip_cfg = hsrp_vip_cfg_list[0]
-            match_obj = re.match(HSRP_V4_VIP_REGEX, hsrp_vip_cfg.text)
-            hsrp_vip_grp_num, hsrp_vip = match_obj.group(1,2)
-            if self.subintf_hsrp_ip_check(intf_segment_dict[intf.segment_id], intf.is_external,
-                                          hsrp_vip) == False:
-                pending_delete_list.append(intf)
-                continue
 
             # Delete if there's any hsrp config with wrong group number
             #del_hsrp_cmd = XML_CMD_TAG % (intf.text)
