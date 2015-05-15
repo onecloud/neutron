@@ -190,6 +190,7 @@ CREATE_SUBINTERFACE_V6_WITH_ID = """
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>vrf forwarding %s</cmd>
             <cmd>ipv6 address %s</cmd>
+            <cmd>ipv6 mtu %s</cmd>
         </cli-config-data>
 </config>
 """
@@ -208,10 +209,10 @@ CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID = """
             <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
             <cmd>encapsulation dot1Q %s</cmd>
             <cmd>ipv6 address %s</cmd>
+            <cmd>ipv6 mtu %s</cmd>
         </cli-config-data>
 </config>
 """
-
 
 #=================================================#
 # Enable HSRP on a Subinterface for ASR 
@@ -226,17 +227,44 @@ SET_INTC_ASR_HSRP_V6 = """
         <cli-config-data>
             <cmd>interface %s</cmd>
             <cmd>standby version 2</cmd>
+            <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s ipv6 autoconfig</cmd>
             <cmd>standby %s priority %s</cmd>
-            <cmd>standby %s preempt</cmd>
-            <cmd>standby %s authentication OPEN</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-hsrp-grp-%s</cmd>
         </cli-config-data>
 </config>
 """
 
+#=================================================#
+# Configure a Subinterface for DHCPv6 stateless address assignment
+# $(config)interface po11.500
+# $(config)ipv6 nd other-config-flag
+#=================================================#
+SET_INTF_V6_STATELESS = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>ipv6 nd other-config-flag</cmd>
+        </cli-config-data>
+</config>
+"""
 
+#=================================================#
+# Configure a Subinterface for DHCPv6 stateful address assignment
+# $(config)interface po11.500
+# $(config)ipv6 nd managed-config-flag
+# $(config)ipv6 nd prefix 2001:DB8:CAFE:17::/64 no-advertise
+# NOTE: 'no-advertise' should really be 'no-autoconfig' when ASR software supports it
+#=================================================#
+SET_INTF_V6_STATEFUL = """
+<config>
+        <cli-config-data>
+            <cmd>interface %s</cmd>
+            <cmd>ipv6 nd managed-config-flag</cmd>
+            <cmd>ipv6 nd prefix %s no-advertise</cmd>
+        </cli-config-data>
+</config>
+"""
 
 #=============================================================================#
 # Set default ipv6 route with interface
@@ -262,6 +290,28 @@ REMOVE_DEFAULT_ROUTE_V6_WITH_INTF = """
 <config>
         <cli-config-data>
             <cmd>no ipv6 route vrf %s ::/0 %s nexthop-vrf default</cmd>
+        </cli-config-data>
+</config>
+"""
+
+
+#=============================================================================#
+# Add/remove an ipv6 route to a tenant network in the default VRF
+# Syntax: ipv6 route <tenant-nexthop-ip> <tenant-interface> nexthop-vrf <tenant-vrf>
+# eg: $(config)ipv6 route 2001:DB8:CAFE:22::1/64 po11.345 nexthop-vrf nrouter-e7d4y5-ttt
+#=============================================================================#
+ADD_V6_TENANT_NETWORK_ROUTE = """
+<config>
+        <cli-config-data>
+            <cmd>ipv6 route %s %s nexthop-vrf %s</cmd>
+        </cli-config-data>
+</config>
+"""
+
+REMOVE_V6_TENANT_NETWORK_ROUTE = """
+<config>
+        <cli-config-data>
+            <cmd>no ipv6 route %s %s nexthop-vrf %s</cmd>
         </cli-config-data>
 </config>
 """

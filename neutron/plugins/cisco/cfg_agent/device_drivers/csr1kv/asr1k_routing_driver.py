@@ -26,6 +26,8 @@ from neutron.common import constants
 
 LOG = logging.getLogger(__name__)
 
+DEFAULT_IPV6_MTU = 9216
+
 ############################################################
 # override some CSR1kv methods to work with physical ASR1k #
 ############################################################
@@ -316,8 +318,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         vlan = self._get_interface_vlan_from_hosting_port(port)
         subinterface = self._get_interface_name_from_hosting_port(port)
 
+
+        # TODO: Add slaac/stateful check and cfg push here
         self._create_subinterface_v6(subinterface, vlan, vrf_name, ip_cidr, is_external)
         self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
+        # TODO: Add route in default vrf for this tenant network
 
     def _csr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
         if self._v6_port_needs_config(port) != True:
@@ -333,6 +338,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         self._set_ha_HSRP_v6(subinterface, priority, group, is_external)
 
+    def _asr_set_v6_tenant_route(self, ri, prefix, subinterface_name, vrf_name, is_delete):
+        if is_delete:
+            confstr = asr_snippets.REMOVE_V6_TENANT_NETWORK_ROUTE % (prefix,
+                                                                     subinterface_name,
+                                                                     vrf_name)
+            self._edit_running_config(confstr, 
+                                      '%s REMOVE_V6_TENANT_NETWORK_ROUTE' % self.target_asr['name'])
+        else:
+            confstr = asr_snippets.ADD_V6_TENANT_NETWORK_ROUTE % (prefix,
+                                                                  subinterface_name,
+                                                                  vrf_name)
+            self._edit_running_config(confstr, 
+                                      '%s ADD_V6_TENANT_NETWORK_ROUTE' % self.target_asr['name'])
+        
 
     def _csr_create_subinterface(self, ri, port, is_external=False, gw_ip=""):
 
@@ -543,19 +562,26 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
     def _create_subinterface_v6(self, subinterface, vlan_id, vrf_name, ip_cidr, is_external=False):
         if is_external is True:
             confstr = asr_snippets.CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID % (subinterface,
-                                                                        self._asr_config.deployment_id,
-                                                                        vlan_id, ip_cidr)
+                                                                            self._asr_config.deployment_id,
+                                                                            vlan_id,
+                                                                            ip_cidr,
+                                                                            DEFAULT_IPV6_MTU)
         else:
             confstr = asr_snippets.CREATE_SUBINTERFACE_V6_WITH_ID % (subinterface,
-                                                                 self._asr_config.deployment_id,
-                                                                 vlan_id, vrf_name, ip_cidr)
+                                                                     self._asr_config.deployment_id,
+                                                                     vlan_id,
+                                                                     vrf_name,
+                                                                     ip_cidr,
+                                                                     DEFAULT_IPV6_MTU)
 
         self._edit_running_config(confstr, '%s CREATE_SUBINTERFACE_V6' % self.target_asr['name'])
 
     def _set_ha_HSRP_v6(self, subinterface, priority, group, is_external=False):
 
-        confstr = asr_snippets.SET_INTC_ASR_HSRP_V6 % (subinterface, group, group,
-                                                   priority, group, group, group, group, group)
+        confstr = asr_snippets.SET_INTC_ASR_HSRP_V6 % (subinterface, 
+                                                       group,
+                                                       group, priority,
+                                                       group)
         
         action = "%s SET_INTC_HSRP_V6 (Group: %s, Priority: % s)" % (self.target_asr['name'], group, priority)
         self._edit_running_config(confstr, action)
@@ -917,8 +943,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 # set timeout in seconds for synchronous netconf requests
                 asr_conn.timeout = 48
                 
-                if self._err_listener is not None:
-                    asr_conn._session.add_listener(self._err_listener)
+                # if self._err_listener is not None:
+                #   asr_conn._session.add_listener(self._err_listener)
                 asr_ent['conn'] = asr_conn
 
             return asr_conn
