@@ -205,7 +205,6 @@ CREATE_SUBINTERFACE_V6_WITH_ID = """
 # $(config)standby <group> ip <ip>
 #=================================================#
 SET_INTC_ASR_HSRP_V6 = """
-<cmd>interface %s</cmd>
 <cmd>standby version 2</cmd>
 <cmd>standby delay minimum 30 reload 60</cmd>
 <cmd>standby %s ipv6 autoconfig</cmd>
