@@ -324,9 +324,10 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         ip_cidr = port['ip_cidr']
         vlan = self._get_interface_vlan_from_hosting_port(port)
         subinterface = self._get_interface_name_from_hosting_port(port)
+        prefix = port['subnet']['cidr']
         ra_mode = port['subnet']['ipv6_ra_mode']
         
-        self._asr_set_ipv6_ra_mode(subinterface, ra_mode)
+        self._asr_set_ipv6_ra_mode(subinterface, ra_mode, prefix)
         self._create_subinterface_v6(subinterface, vlan, vrf_name, ip_cidr, is_external)
         self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
 
@@ -344,9 +345,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         self._set_ha_HSRP_v6(subinterface, priority, group, is_external)
 
-    def _asr_set_ipv6_ra_mode(self, subinterface_name, ra_mode):
+
+    def _asr_set_ipv6_ra_mode(self, subinterface_name, ra_mode, prefix):
         if ra_mode == constants.DHCPV6_STATEFUL:
-            confstr = asr_snippets.SET_INTF_V6_STATEFUL % (subinterface_name)
+            confstr = asr_snippets.SET_INTF_V6_STATEFUL % (subinterface_name,
+                                                           prefix)
             self._edit_running_config(confstr,
                                       '%s SET_INTF_V6_STATEFUL' % self.target_asr['name'])
         elif ra_mode == constants.DHCPV6_STATELESS:
