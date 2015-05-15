@@ -332,7 +332,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         confstr += asr_snippets.INTF_NAME_CONFSTR % subinterface
 
-        if is_external:
+        if is_external == False:
             confstr += asr_snippets.INTF_VRF_CONFSTR % vrf_name
 
         # Add V6 intf parameters
