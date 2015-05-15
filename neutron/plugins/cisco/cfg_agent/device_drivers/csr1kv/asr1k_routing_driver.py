@@ -326,12 +326,37 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         subinterface = self._get_interface_name_from_hosting_port(port)
         prefix = port['subnet']['cidr']
         ra_mode = port['subnet']['ipv6_ra_mode']
-        
-        self._asr_set_ipv6_ra_mode(subinterface, ra_mode, prefix)
-        self._create_subinterface_v6(subinterface, vlan, vrf_name, ip_cidr, is_external)
-        self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
 
-    def _csr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
+        # Start XML confstr
+        confstr = asr_snippets.CONFSTR_START_TAG
+
+        # Add subinterface name
+        confstr += asr_snippets.INTF_NAME_CONFSTR % subinterface
+
+        # Add VRF name if external
+        if is_external:
+            confstr += asr_snippets.INTF_VRF_CONFSTR % vrf_name
+
+
+        # Add V6 intf parameters
+        confstr += asr_snippets.CREATE_SUBINTERFACE_V6_WITH_ID % (self._asr_config.deployment_id,
+                                                                  vlan,
+                                                                  ip_cidr,
+                                                                  DEFAULT_IPV6_MTU)
+        # Add ra_mode conf
+        confstr += self._asr_set_ipv6_ra_mode(subinterface, ra_mode, prefix)
+        
+        # Add HSRP conf
+        confstr += self._asr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
+
+        # Close confstr
+        confstr += asr_snippets.CONFSTR_END_TAG
+        
+        self._edit_running_config(confstr, 
+                                  '%s CREATE_V6_SUBINTF' % self.target_asr['name'])
+        
+
+    def _asr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
         if self._v6_port_needs_config(port) != True:
             return
 
@@ -339,23 +364,25 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         group = vlan
 
         asr_ent = self.target_asr
-        
         priority = asr_ent['order']
-        subinterface = self._get_interface_name_from_hosting_port(port)
 
-        self._set_ha_HSRP_v6(subinterface, priority, group, is_external)
+        confstr = asr_snippets.SET_INTC_ASR_HSRP_V6 % (group,
+                                                       group, priority,
+                                                       group)
+
+        return confstr
 
 
     def _asr_set_ipv6_ra_mode(self, subinterface_name, ra_mode, prefix):
+        confstr = ""
         if ra_mode == constants.DHCPV6_STATEFUL:
             confstr = asr_snippets.SET_INTF_V6_STATEFUL % (subinterface_name,
                                                            prefix)
-            self._edit_running_config(confstr,
-                                      '%s SET_INTF_V6_STATEFUL' % self.target_asr['name'])
         elif ra_mode == constants.DHCPV6_STATELESS:
             confstr = asr_snippets.SET_INTF_V6_STATELESS % (subinterface_name)
-            self._edit_running_config(confstr,
-                                      '%s SET_INTF_V6_STATELESS' % self.target_asr['name'])
+
+        return confstr
+
 
     def _asr_set_v6_tenant_route_from_port(self, ri, port, is_delete):
         if self._v6_port_needs_config(port) != True:
@@ -602,7 +629,8 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                                      ip_cidr,
                                                                      DEFAULT_IPV6_MTU)
 
-        self._edit_running_config(confstr, '%s CREATE_SUBINTERFACE_V6' % self.target_asr['name'])
+        # self._edit_running_config(confstr, '%s CREATE_SUBINTERFACE_V6' % self.target_asr['name'])
+        return confstr
 
     def _set_ha_HSRP_v6(self, subinterface, priority, group, is_external=False):
 

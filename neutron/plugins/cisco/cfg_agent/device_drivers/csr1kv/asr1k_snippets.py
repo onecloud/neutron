@@ -175,25 +175,12 @@ REMOVE_VRF_DEFN = """
 </config>
 """
 
-#=================================================#
-# Create Subinterface (with deployment_id)
-# $(config)interface GigabitEthernet 2.500
-# $(config)encapsulation dot1Q 500
-# $(config)vrf forwarding nrouter-abc-e7d4y5
-# $(config)ip address 2001:DB8:CAFE:A::1/64
-#=================================================#
-CREATE_SUBINTERFACE_V6_WITH_ID = """
-<config>
-        <cli-config-data>
-            <cmd>interface %s</cmd>
-            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
-            <cmd>encapsulation dot1Q %s</cmd>
-            <cmd>vrf forwarding %s</cmd>
-            <cmd>ipv6 address %s</cmd>
-            <cmd>ipv6 mtu %s</cmd>
-        </cli-config-data>
-</config>
-"""
+
+CONFSTR_START_TAG = "<config><cli-config-data>"
+CONFSTR_END_TAG = "</cli-config-data><config>"
+INTF_NAME_CONFSTR = "<cmd>interface %s</cmd>"
+INTF_VRF_CONFSTR = "<cmd>vrf forwarding %s</cmd>"
+
 
 #=================================================#
 # Create Subinterface (with deployment_id)
@@ -202,16 +189,11 @@ CREATE_SUBINTERFACE_V6_WITH_ID = """
 # $(config)vrf forwarding nrouter-abc-e7d4y5
 # $(config)ip address 2001:DB8:CAFE:A::1/64
 #=================================================#
-CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID = """
-<config>
-        <cli-config-data>
-            <cmd>interface %s</cmd>
-            <cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
-            <cmd>encapsulation dot1Q %s</cmd>
-            <cmd>ipv6 address %s</cmd>
-            <cmd>ipv6 mtu %s</cmd>
-        </cli-config-data>
-</config>
+CREATE_SUBINTERFACE_V6_WITH_ID = """
+<cmd>description OPENSTACK_NEUTRON-%s_INTF</cmd>
+<cmd>encapsulation dot1Q %s</cmd>
+<cmd>ipv6 address %s</cmd>
+<cmd>ipv6 mtu %s</cmd>
 """
 
 #=================================================#
@@ -223,16 +205,12 @@ CREATE_SUBINTERFACE_V6_NO_VRF_WITH_ID = """
 # $(config)standby <group> ip <ip>
 #=================================================#
 SET_INTC_ASR_HSRP_V6 = """
-<config>
-        <cli-config-data>
-            <cmd>interface %s</cmd>
-            <cmd>standby version 2</cmd>
-            <cmd>standby delay minimum 30 reload 60</cmd>
-            <cmd>standby %s ipv6 autoconfig</cmd>
-            <cmd>standby %s priority %s</cmd>
-            <cmd>standby %s timers 1 3</cmd>
-        </cli-config-data>
-</config>
+<cmd>interface %s</cmd>
+<cmd>standby version 2</cmd>
+<cmd>standby delay minimum 30 reload 60</cmd>
+<cmd>standby %s ipv6 autoconfig</cmd>
+<cmd>standby %s priority %s</cmd>
+<cmd>standby %s timers 1 3</cmd>
 """
 
 #=================================================#
@@ -241,12 +219,7 @@ SET_INTC_ASR_HSRP_V6 = """
 # $(config)ipv6 nd other-config-flag
 #=================================================#
 SET_INTF_V6_STATELESS = """
-<config>
-        <cli-config-data>
-            <cmd>interface %s</cmd>
-            <cmd>ipv6 nd other-config-flag</cmd>
-        </cli-config-data>
-</config>
+<cmd>ipv6 nd other-config-flag</cmd>
 """
 
 #=================================================#
@@ -257,13 +230,8 @@ SET_INTF_V6_STATELESS = """
 # NOTE: 'no-advertise' should really be 'no-autoconfig' when ASR software supports it
 #=================================================#
 SET_INTF_V6_STATEFUL = """
-<config>
-        <cli-config-data>
-            <cmd>interface %s</cmd>
-            <cmd>ipv6 nd managed-config-flag</cmd>
-            <cmd>ipv6 nd prefix %s no-advertise</cmd>
-        </cli-config-data>
-</config>
+<cmd>ipv6 nd managed-config-flag</cmd>
+<cmd>ipv6 nd prefix %s no-advertise</cmd>
 """
 
 #=============================================================================#
