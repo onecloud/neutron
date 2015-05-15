@@ -229,8 +229,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         if self._is_port_v6(port):
             LOG.debug("ADDING IPV6 NETWORK port: %s" % port)
             self._csr_create_subinterface_v6(ri, port, False, gw_ip)
+            self._asr_set_v6_tenant_route_from_port(ri, port, False)
         else:
             self._csr_create_subinterface(ri, port, False, gw_ip)
+
+    def internal_network_removed(self, ri, port):
+        if self._is_port_v6(port):
+            self._asr_set_v6_tenant_route_from_port(ri, port, True)
+
+        self._csr_remove_subinterface(port)
 
     def external_gateway_added(self, ri, ex_gw_port):
         # global router handles IP assignment, HSRP setup
@@ -317,12 +324,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         ip_cidr = port['ip_cidr']
         vlan = self._get_interface_vlan_from_hosting_port(port)
         subinterface = self._get_interface_name_from_hosting_port(port)
-
-
-        # TODO: Add slaac/stateful check and cfg push here
+        ra_mode = port['subnet']['ipv6_ra_mode']
+        
+        self._asr_set_ipv6_ra_mode(subinterface, ra_mode)
         self._create_subinterface_v6(subinterface, vlan, vrf_name, ip_cidr, is_external)
         self._csr_add_ha_HSRP_v6(ri, port, ip_cidr, is_external) # Always do HSRP
-        # TODO: Add route in default vrf for this tenant network
 
     def _csr_add_ha_HSRP_v6(self, ri, port, ip, is_external=False):
         if self._v6_port_needs_config(port) != True:
@@ -338,7 +344,26 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
         self._set_ha_HSRP_v6(subinterface, priority, group, is_external)
 
-    def _asr_set_v6_tenant_route(self, ri, prefix, subinterface_name, vrf_name, is_delete):
+    def _asr_set_ipv6_ra_mode(self, subinterface_name, ra_mode):
+        if ra_mode == constants.DHCPV6_STATEFUL:
+            confstr = asr_snippets.SET_INTF_V6_STATEFUL % (subinterface_name)
+            self._edit_running_config(confstr,
+                                      '%s SET_INTF_V6_STATEFUL' % self.target_asr['name'])
+        elif ra_mode == constants.DHCPV6_STATELESS:
+            confstr = asr_snippets.SET_INTF_V6_STATELESS % (subinterface_name)
+            self._edit_running_config(confstr,
+                                      '%s SET_INTF_V6_STATELESS' % self.target_asr['name'])
+
+    def _asr_set_v6_tenant_route_from_port(self, ri, port, is_delete):
+        if self._v6_port_needs_config(port) != True:
+            return
+
+        vrf_name = self._csr_get_vrf_name(ri)
+        subinterface = self._get_interface_name_from_hosting_port(port)
+        prefix = port['subnet']['cidr']
+        self._asr_set_v6_tenant_route(prefix, subinterface, vrf_name, is_delete)
+
+    def _asr_set_v6_tenant_route(self, prefix, subinterface_name, vrf_name, is_delete):
         if is_delete:
             confstr = asr_snippets.REMOVE_V6_TENANT_NETWORK_ROUTE % (prefix,
                                                                      subinterface_name,
@@ -379,9 +404,9 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
 
     def _csr_remove_subinterface(self, port):
-
-        if not self._port_needs_config(port):
-            return
+        if self._is_port_v6(port) != True:
+            if not self._port_needs_config(port):
+                return
 
         subinterface = self._get_interface_name_from_hosting_port(port)
         self._remove_subinterface(subinterface)
