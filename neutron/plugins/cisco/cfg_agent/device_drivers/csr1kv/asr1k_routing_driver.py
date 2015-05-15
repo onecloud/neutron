@@ -355,7 +355,11 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             return
 
         vlan = self._get_interface_vlan_from_hosting_port(port)
-        group = vlan
+        # group = vlan
+        if is_external:
+            group = self._get_hsrp_grp_num_from_net_id(port['network_id'])
+        else:
+            group = self._get_hsrp_grp_num_from_ri(ri)
 
         asr_ent = self.target_asr
         priority = asr_ent['order']
