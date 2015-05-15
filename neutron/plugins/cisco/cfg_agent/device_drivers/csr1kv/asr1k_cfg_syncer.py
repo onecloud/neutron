@@ -51,7 +51,7 @@ DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.
 
 DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 %s\.(\d+) ([0-9A-Fa-f:]+) nexthop-vrf default"
 
-TENANT_ROUTE_V6_REGEX_BASE = "ipv6 route ([0-9A-Fa-f:/]+) %s.(\d+) nexthop-vrf " + NROUTER_REGEX
+TENANT_ROUTE_V6_REGEX_BASE = "ipv6 route ([0-9A-Fa-f:]+)\/(\d+) %s.(\d+) nexthop-vrf " + NROUTER_REGEX
 INTF_V6_ADDR_REGEX = "\s*ipv6 address ([0-9A-Fa-f:/]+)"
 
 
@@ -369,9 +369,9 @@ class ConfigSyncer(object):
                 continue
 
             db_intf = intf_segment_dict[intf.segment_id][0]
-            target_v6_net = netaddr.IPNetwork(db_intf['subnet']['cidr'])
-            actual_v6_net = netaddr.IPNetwork(prefix)
-            if target_v6_net != actual_v6_net:
+            target_prefix = netaddr.IPNetwork(db_intf['subnet']['cidr'])
+            actual_prefix = netaddr.IPNetwork(prefix)
+            if target_prefix != actual_prefix:
                 LOG.info("Tenant route has incorrect prefix, deleting")
                 delete_route_list.append(route.text)
                 continue
@@ -747,7 +747,7 @@ class ConfigSyncer(object):
 
         return False
 
-    def subintf_real_ipv6_check(self, intf_list, is_external, ipv6_addr):
+    def subintf_real_ipv6_check(self, intf_list, is_external, ipv6_addr, prefixlen):
 
         if is_external:
             target_type = constants.DEVICE_OWNER_ROUTER_GW
@@ -757,15 +757,18 @@ class ConfigSyncer(object):
         for target_intf in intf_list:
             if target_intf['device_owner'] == target_type:
 
-                target_ip_cidr = target_intf['ip_cidr']
-                target_v6_net = netaddr.IPNetwork(target_ip_cidr)
-                actual_v6_net = netaddr.IPNetwork(ipv6_addr)
-                
-                LOG.info("target ip_cidr: %s, actual ip_cidr %s" % (target_ip_cidr,
-                                                                    ipv6_addr))
+                target_ip = netaddr.IPAddress(target_intf['fixed_ips'][0]['ip_address'])
+                target_prefixlen = netaddr.IPNetwork(target_intf['subnet']['cidr']).prefixlen
 
-                if target_v6_net != actual_v6_net:
+                LOG.info("target ip,prefixlen: %s,%s, actual ip,prefixlen %s,%s" % (target_ip, target_prefixlen,
+                                                                                    ipv6_addr, prefixlen))
+
+                if target_ip != netaddr.IPAddress(ipv6_addr):
                     LOG.info("Subintf IPv6 addr is incorrect, deleting")
+                    return False
+
+                if target_prefixlen != prefixlen:
+                    LOG.info("Subintf IPv6 prefix length is incorrect, deleting")
                     return False
                     
                 return True
@@ -875,11 +878,11 @@ class ConfigSyncer(object):
 
         ipv6_addr_cfg = ipv6_addr[0]
         match_obj = re.match(INTF_V6_ADDR_REGEX, ipv6_addr_cfg.text)
-        ipv6_addr = match_obj.group(1)
+        ipv6_addr, prefixlen = match_obj.group(1,2)
 
         return self.subintf_real_ipv6_check(intf_segment_dict[intf.segment_id],
                                             intf.is_external,
-                                            ipv6_addr)
+                                            ipv6_addr, prefixlen)
 
     def clean_interfaces(self, conn, intf_segment_dict, segment_nat_dict, parsed_cfg):
         runcfg_intfs = [obj for obj in parsed_cfg.find_objects("^interf") \
