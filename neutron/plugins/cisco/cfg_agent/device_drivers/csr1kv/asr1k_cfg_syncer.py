@@ -51,8 +51,8 @@ DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.
 
 DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + " ::/0 %s\.(\d+) ([0-9A-Fa-f:]+) nexthop-vrf default"
 
-TENANT_ROUTE_V6_REGEX_BASE = "ipv6 route ([0-9A-Fa-f:\\]+) %s.(\d+) nexthop-vrf " + NROUTER_REGEX
-INTF_V6_ADDR_REGEX = "\s*ipv6 address ([0-9A-Fa-f:\\]+)"
+TENANT_ROUTE_V6_REGEX_BASE = "ipv6 route ([0-9A-Fa-f:/]+) %s.(\d+) nexthop-vrf " + NROUTER_REGEX
+INTF_V6_ADDR_REGEX = "\s*ipv6 address ([0-9A-Fa-f:/]+)"
 
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
