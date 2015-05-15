@@ -756,20 +756,19 @@ class ConfigSyncer(object):
 
         for target_intf in intf_list:
             if target_intf['device_owner'] == target_type:
-                asr_name = target_intf['phy_router_db']['name']
-                if asr_name == self.target_asr_name:
-                    target_ip_cidr = target_intf['ip_cidr']
-                    target_v6_net = netaddr.IPNetwork(target_ip_cidr)
-                    actual_v6_net = netaddr.IPNetwork(ipv6_addr)
 
-                    LOG.info("target ip_cidr: %s, actual ip_cidr %s" % (target_ip_cidr,
-                                                                        ipv6_addr))
+                target_ip_cidr = target_intf['ip_cidr']
+                target_v6_net = netaddr.IPNetwork(target_ip_cidr)
+                actual_v6_net = netaddr.IPNetwork(ipv6_addr)
+                
+                LOG.info("target ip_cidr: %s, actual ip_cidr %s" % (target_ip_cidr,
+                                                                    ipv6_addr))
 
-                    if target_v6_net != actual_v6_net:
-                        LOG.info("Subintf IPv6 addr is incorrect, deleting")
-                        return False
-
-                    return True
+                if target_v6_net != actual_v6_net:
+                    LOG.info("Subintf IPv6 addr is incorrect, deleting")
+                    return False
+                    
+                return True
 
         return False
 
