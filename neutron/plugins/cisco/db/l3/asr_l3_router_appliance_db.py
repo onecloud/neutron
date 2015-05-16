@@ -561,6 +561,10 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                 # already scheduled.
                 self._add_type_and_hosting_device_info(e_context, o_r,
                                                        schedule=False)
+
+            # Note that the parent class' update_router function
+            # will call _update_router_gw_info, but router_updated notification for CfgAgent
+            # is sent in this function.
             router_updated = (
                 super(l3_router_appliance_db.L3RouterApplianceDBMixin, self).update_router(
                     context, id, router))
