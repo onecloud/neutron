@@ -187,7 +187,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             port_list.append(asr_port)
             self._core_plugin.delete_port(context, asr_port['id'],
                                           l3_port_check=False)
-            LOG.error("ZXCVWSAD deleted port %s" % (asr_port))
+            LOG.info("deleted port %s" % (asr_port))
 
         # don't notify if gw hsrp interfaces are deleted
         if dev_owner == l3_constants.DEVICE_OWNER_ROUTER_HA_GW:
@@ -218,8 +218,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
         subnet_id = info['subnet_id']
         subnet = self._core_plugin._get_subnet(context, subnet_id)
 
-        self._create_hsrp_interfaces(context, router_id, subnet, 
-                                     l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+        if subnet['ip_version'] == 6:
+            self.l3_rpc_notifier.routers_updated(context,
+                                                 [router_id],
+                                                 'add_router_interface')
+        else:
+            self._create_hsrp_interfaces(context, router_id, subnet, 
+                                         l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
         
         return info
 
@@ -235,9 +240,14 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
         # If no exception has been raised, we're good to go            
         subnet_id = info['subnet_id']
         subnet = self._core_plugin._get_subnet(context, subnet_id)
-        
-        self._delete_hsrp_interfaces(context, router_id, subnet,
-                                     l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
+
+        if subnet['ip_version'] == 6:
+            self.l3_rpc_notifier.routers_updated(context,
+                                                 [router_id],
+                                                 'remove_router_interface')
+        else:
+            self._delete_hsrp_interfaces(context, router_id, subnet,
+                                         l3_constants.DEVICE_OWNER_ROUTER_HA_INTF)
 
         return info
 
@@ -425,8 +435,9 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
 
             # No external gateway assignments left, clear the HSRP interfaces
             if self._count_ha_routers_on_network(context, gw_port['network_id']) == 1:
-                self._delete_hsrp_interfaces(context.elevated(), None, subnet,
-                                             l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
+                if subnet['ip_version'] != 6:
+                    self._delete_hsrp_interfaces(context.elevated(), None, subnet,
+                                                 l3_constants.DEVICE_OWNER_ROUTER_HA_GW)
 
                 # Clear gw_port from PHYSICAL_GLOBAL_ROUTER so it can be deleted
                 #phy_router = self._get_router(context.elevated(), PHYSICAL_GLOBAL_ROUTER_ID)
@@ -453,10 +464,13 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                 needs_hsrp_create = True
             
             self._create_router_gw_port(context, router, network_id) 
+            subnet_id = router.gw_port['fixed_ips'][0]['subnet_id']
+            subnet = self._core_plugin._get_subnet(context.elevated(), subnet_id)
 
             if needs_hsrp_create is True:
                 self._create_phy_router_gw_port(context, router, network_id)
-                self._create_router_gw_hsrp_interfaces(context, router, network_id, [router.gw_port])
+                if subnet['ip_version'] != 6:
+                    self._create_router_gw_hsrp_interfaces(context, router, network_id, [router.gw_port])
                 self._send_physical_global_router_updated_notification(context)
 
 
