@@ -1219,6 +1219,12 @@ class OvsDhcpAgentNotifierTestCase(test_l3_plugin.L3NatTestCaseMixin,
                 mock.call(
                     mock.ANY,
                     self.dhcp_notifier.make_msg(
+                        'subnet_create_end',
+                        payload=subnet),
+                    topic='dhcp_agent.' + host),
+                mock.call(
+                    mock.ANY,
+                    self.dhcp_notifier.make_msg(
                         'port_create_end',
                         payload={'port': port['port']}),
                     topic='dhcp_agent.' + host)]

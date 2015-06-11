@@ -771,6 +771,7 @@ class TestL3NatTestCase(L3NatTest,
         self._metadata_teardown()
 
     def test_metadatata_network_created_with_router_interface_add(self):
+        self.skipTest("NSX not supported on COPC")
         self._metadata_setup()
         with mock.patch.object(self._plugin_class, 'schedule_network') as f:
             with self.router() as r:
