@@ -1,0 +1,9 @@
+/var/log/neutron/ryu-agent.log
+{
+    rotate 7
+    daily
+    missingok
+    ifempty
+    compress
+    create 0644 neutron adm
+}
