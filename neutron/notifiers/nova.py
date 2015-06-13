@@ -14,6 +14,7 @@
 #    under the License.
 
 import eventlet
+from keystoneclient.v2_0 import client as keystone
 from novaclient import exceptions as nova_exceptions
 import novaclient.v1_1.client as nclient
 from novaclient.v1_1.contrib import server_external_events
@@ -41,13 +42,21 @@ class Notifier(object):
     def __init__(self):
         # TODO(arosen): we need to cache the endpoints and figure out
         # how to deal with different regions here....
-        bypass_url = "%s/%s" % (cfg.CONF.nova_url,
-                                cfg.CONF.nova_admin_tenant_id)
+        self.tenant_id = cfg.CONF.nova_admin_tenant_id
+        self.tenant_name = cfg.CONF.nova_admin_tenant_name
+        if self.tenant_id is None and self.tenant_name is not None:
+            self.tenant_id = keystone.Client(
+                username=cfg.CONF.nova_admin_username,
+                password=cfg.CONF.nova_admin_password,
+                tenant_name=self.tenant_name,
+                auth_url=cfg.CONF.nova_admin_auth_url).auth_tenant_id
+
+        bypass_url = "%s/%s" % (cfg.CONF.nova_url, self.tenant_id)
         self.nclient = nclient.Client(
             username=cfg.CONF.nova_admin_username,
             api_key=cfg.CONF.nova_admin_password,
             project_id=None,
-            tenant_id=cfg.CONF.nova_admin_tenant_id,
+            tenant_id=self.tenant_id,
             auth_url=cfg.CONF.nova_admin_auth_url,
             cacert=cfg.CONF.nova_ca_certificates_file,
             insecure=cfg.CONF.nova_api_insecure,

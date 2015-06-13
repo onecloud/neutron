@@ -100,7 +100,11 @@ core_opts = [
                help=_('Password for connection to nova in admin context'),
                secret=True),
     cfg.StrOpt('nova_admin_tenant_id',
+               default=None,
                help=_('The uuid of the admin nova tenant')),
+    cfg.StrOpt('nova_admin_tenant_name',
+               default=None,
+               help=_('The name of the admin nova tenant')),
     cfg.StrOpt('nova_admin_auth_url',
                default='http://localhost:5000/v2.0',
                help=_('Authorization URL for connecting to nova in admin '
