@@ -485,10 +485,10 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
             if vpnservice:
                 vpnservice.check_router_in_use(context, id)
 
-            context.session.delete(router)
 
             # Delete the gw port after the router has been removed to
             # avoid a constraint violation.
+            router.gw_port = None
             device_filter = {'device_id': [id],
                              'device_owner': [l3_constants.DEVICE_OWNER_ROUTER_GW]}
             ports = self._core_plugin.get_ports(context.elevated(),
@@ -497,6 +497,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                 self._core_plugin._delete_port(context.elevated(),
                                                port['id'])
 
+            context.session.delete(router)
             self.l3_cfg_rpc_notifier.router_deleted(context, router)
 
             # if this router had no gw port, we are done
