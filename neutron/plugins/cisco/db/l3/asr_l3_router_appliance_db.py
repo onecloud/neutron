@@ -81,6 +81,14 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.L3RouterApplianceD
                                          PhysicalL3RouterJointAgentNotifyAPI(self))
         return self._l3_cfg_rpc_notifier
 
+    def notify_routers_updated(self, context, router_ids,
+                               operation=None, data=None):
+        if router_ids:
+            filters = {'id': router_ids}
+            router_dicts = self.get_routers(context, filters=filters)
+            self.l3_cfg_rpc_notifier.routers_updated(
+                context, router_dicts, operation, data)
+
     def _phy_l3_mixin_init(self):
         from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (asr1k_routing_driver as asr1k_driver)
         self._db_synced = False
