@@ -1,1 +1,2 @@
 usr/bin/neutron-vpn-agent usr/bin
+etc/vpn_agent.ini etc/neutron

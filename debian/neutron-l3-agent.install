@@ -1,1 +1,2 @@
 usr/bin/neutron-l3-agent usr/bin
+etc/l3_agent.ini etc/neutron
