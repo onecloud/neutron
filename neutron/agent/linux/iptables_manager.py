@@ -282,7 +282,8 @@ class IptablesManager(object):
 
     def __init__(self, _execute=None, state_less=False,
                  root_helper=None, use_ipv6=False, namespace=None,
-                 binary_name=binary_name):
+                 binary_name=binary_name, iptables_top_regex=None,
+                 iptables_bottom_regex=None):
         if _execute:
             self.execute = _execute
         else:
@@ -292,6 +293,8 @@ class IptablesManager(object):
         self.root_helper = root_helper
         self.namespace = namespace
         self.iptables_apply_deferred = False
+        self.iptables_top_regex = iptables_top_regex
+        self.iptables_bottom_regex = iptables_bottom_regex
         self.wrap_name = binary_name[:16]
 
         self.ipv4 = {'filter': IptablesTable(binary_name=self.wrap_name)}
@@ -508,6 +511,25 @@ class IptablesManager(object):
             (old_filter if self.wrap_name in line else
              new_filter).append(line.strip())
 
+        top_rules = []
+        bottom_rules = []
+
+        if self.iptables_top_regex:
+            regex = re.compile(self.iptables_top_regex)
+            temp_filter = filter(lambda line: regex.search(line), new_filter)
+            for rule_str in temp_filter:
+                new_filter = filter(lambda s: s.strip() != rule_str.strip(),
+                                    new_filter)
+            top_rules = temp_filter
+
+        if self.iptables_bottom_regex:
+            regex = re.compile(self.iptables_bottom_regex)
+            temp_filter = filter(lambda line: regex.search(line), new_filter)
+            for rule_str in temp_filter:
+                new_filter = filter(lambda s: s.strip() != rule_str.strip(),
+                    new_filter)
+            bottom_rules = temp_filter
+
         rules_index = self._find_rules_index(new_filter)
 
         all_chains = [':%s' % name for name in unwrapped_chains]
@@ -535,7 +557,7 @@ class IptablesManager(object):
 
         # Iterate through all the rules, trying to find an existing
         # match.
-        our_rules = []
+        our_rules = top_rules
         bot_rules = []
         for rule in rules:
             rule_str = str(rule).strip()
@@ -567,6 +589,21 @@ class IptablesManager(object):
 
         new_filter[rules_index:rules_index] = our_rules
         new_filter[rules_index:rules_index] = our_chains
+
+        if 'COMMIT' in new_filter:
+            # Insert it before the COMMIT
+            commit_index = new_filter.index('COMMIT')
+            new_filter[commit_index:commit_index] = bottom_rules
+        else:
+            # Just add it to the end
+            new_filter += bottom_rules
+
+        # Make sure the table definition is in the proper place
+        table_def = '*%s' % (table_name)
+        if table_def in new_filter:
+            new_filter.remove(table_def)
+            # Insert it after the first comment line
+            new_filter[1:1] = [table_def]
 
         def _strip_packets_bytes(line):
             # strip any [packet:byte] counts at start or end of lines
@@ -622,7 +659,6 @@ class IptablesManager(object):
                     if rule_str == line:
                         remove_rules.remove(rule)
                         return False
-
             # Leave it alone
             return True
 

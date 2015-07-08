@@ -973,6 +973,50 @@ class IptablesManagerStateFulTestCase(base.BaseTestCase):
         ret_str = self._test_find_last_entry(find_str)
         self.assertIsNone(ret_str)
 
+    def test_iptables_top_order(self):
+        # Test iptables_top_regex
+        self.iptables = iptables_manager.IptablesManager(
+            root_helper=self.root_helper,
+            iptables_top_regex='-j iptables-top-rule')
+        current_lines = []
+        for line in FILTER_DUMP.split('\n'):
+            current_lines += [str(line).strip()]
+        current_lines[7:7] = ['[0:0] -A FORWARD -j iptables-top-rule']
+        new_lines = self.iptables._modify_rules(current_lines,
+                                                self.iptables.ipv4['filter'],
+                                                'filter')
+        self.assertEqual(current_lines, new_lines)
+
+    def test_iptables_bottom_order(self):
+        # Test iptables_bottom_regex
+        self.iptables = iptables_manager.IptablesManager(
+            root_helper=self.root_helper,
+            iptables_bottom_regex='-j iptables-bottom-rule')
+        current_lines = []
+        for line in FILTER_DUMP.split('\n'):
+            current_lines += [str(line).strip()]
+        current_lines[13:13] = ['[0:0] -A FORWARD -j iptables-bottom-rule']
+        new_lines = self.iptables._modify_rules(current_lines,
+                                                self.iptables.ipv4['filter'],
+                                                'filter')
+        self.assertEqual(current_lines, new_lines)
+
+    def test_iptables_preserve_order(self):
+        # Test iptables_bottom_regex
+        self.iptables = iptables_manager.IptablesManager(
+            root_helper=self.root_helper,
+            iptables_top_regex='-j iptables-top-rule',
+            iptables_bottom_regex='-j iptables-bottom-rule')
+        current_lines = []
+        for line in FILTER_DUMP.split('\n'):
+            current_lines += [str(line).strip()]
+        current_lines[7:7] = ['[0:0] -A FORWARD -j iptables-top-rule']
+        current_lines[14:14] = ['[0:0] -A FORWARD -j iptables-bottom-rule']
+        new_lines = self.iptables._modify_rules(current_lines,
+                                                self.iptables.ipv4['filter'],
+                                                'filter')
+        self.assertEqual(current_lines, new_lines)
+
 
 class IptablesManagerStateLessTestCase(base.BaseTestCase):
 
