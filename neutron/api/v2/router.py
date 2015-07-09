@@ -39,6 +39,14 @@ COLLECTION_ACTIONS = ['index', 'create']
 MEMBER_ACTIONS = ['show', 'update', 'delete']
 REQUIREMENTS = {'id': attributes.UUID_PATTERN, 'format': 'xml|json'}
 
+metacloud_opts = [
+    cfg.BoolOpt('enable_ipv6',
+                default=True,
+                help='Enable IPv6 functionalities'),
+]
+CONF = cfg.CONF
+CONF.register_opts(metacloud_opts, group='metacloud')
+
 
 class Index(wsgi.Application):
     def __init__(self, resources):
@@ -75,6 +83,8 @@ class APIRouter(wsgi.Router):
         mapper = routes_mapper.Mapper()
         plugin = manager.NeutronManager.get_plugin()
         ext_mgr = extensions.PluginAwareExtensionManager.get_instance()
+
+        attributes.update_resource_attributes(cfg.CONF.metacloud.enable_ipv6)
         ext_mgr.extend_resources("2.0", attributes.RESOURCE_ATTRIBUTE_MAP)
 
         col_kwargs = dict(collection_actions=COLLECTION_ACTIONS,

@@ -619,6 +619,20 @@ def convert_to_list(data):
         return [data]
 
 
+def update_resource_attributes(enable_ipv6):
+    if not enable_ipv6:
+        RESOURCE_ATTRIBUTE_MAP[SUBNETS]['ip_version']['validate'] = \
+            {'type:values': [4]}
+
+        RESOURCE_ATTRIBUTE_MAP[SUBNETS]['ipv6_ra_mode']['allow_post'] = False
+        RESOURCE_ATTRIBUTE_MAP[SUBNETS]['ipv6_ra_mode']['is_visible'] = False
+
+        RESOURCE_ATTRIBUTE_MAP[SUBNETS]['ipv6_address_mode']['allow_post'] = \
+            False
+        RESOURCE_ATTRIBUTE_MAP[SUBNETS]['ipv6_address_mode']['is_visible'] = \
+            False
+
+
 HEX_ELEM = '[0-9A-Fa-f]'
 UUID_PATTERN = '-'.join([HEX_ELEM + '{8}', HEX_ELEM + '{4}',
                          HEX_ELEM + '{4}', HEX_ELEM + '{4}',
