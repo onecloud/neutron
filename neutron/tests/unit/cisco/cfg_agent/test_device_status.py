@@ -11,7 +11,6 @@
 #    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #    License for the specific language governing permissions and limitations
 #    under the License.
-import sys
 
 import datetime
 import mock
@@ -19,8 +18,6 @@ import mock
 from neutron.openstack.common import log as logging
 from neutron.openstack.common import uuidutils
 
-sys.modules['ncclient'] = mock.MagicMock()
-sys.modules['ciscoconfparse'] = mock.MagicMock()
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.tests import base
 
