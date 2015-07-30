@@ -31,10 +31,10 @@ from neutron.plugins.cisco.cfg_agent.device_drivers import \
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
 
+from neutron.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import \
     (asr1k_routing_driver as asr1kv_driver)
 from neutron.plugins.cisco.cfg_agent.service_helpers import routing_svc_helper
-
 LOG = logging.getLogger(__name__)
 
 N_ROUTER_PREFIX = 'nrouter-'
@@ -130,6 +130,14 @@ class PhyCiscoRoutingPluginApi(n_rpc.RpcProxy):
 
     def create_rpc_dispatcher(self):
         return n_rpc.PluginRpcDispatcher([self])
+
+    def device_status_update(self, context, port_id, status):
+        return self.call(context,
+                         self.make_msg('device_status_update',
+                                       port_id=port_id,
+                                       status=status),
+                         topic=self.topic,
+                         timeout=6)
 
 
 class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
@@ -382,8 +390,14 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
 
             for p in new_ports:
                 self._set_subnet_info(p)
-                self._internal_network_added(ri, p, ex_gw_port)
+                try:
+                    self._internal_network_added(ri, p, ex_gw_port)
+                except cfg_exc.CSR1kvConfigException:
+                    self._set_port_status(p['id'],
+                                          l3_constants.PORT_STATUS_DOWN)
+                    continue
                 ri.internal_ports.append(p)
+                self._set_port_status(p['id'], l3_constants.PORT_STATUS_ACTIVE)
 
             for p in old_ports:
                 self._internal_network_removed(ri, p, ri.ex_gw_port)
@@ -391,8 +405,14 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
 
             for p in new_gw_ports:
                 self._set_subnet_info(p)
-                self._external_gateway_added(ri, p)
+                try:
+                    self._external_gateway_added(ri, p)
+                except cfg_exc.CSR1kvConfigException:
+                    self._set_port_status(p['id'],
+                                          l3_constants.PORT_STATUS_DOWN)
+                    continue
                 ri.ha_gw_ports.append(p)
+                self._set_port_status(p['id'], l3_constants.PORT_STATUS_ACTIVE)
 
             for p in old_gw_ports:
                 self._external_gateway_removed(ri, p)
@@ -403,9 +423,10 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             #     self._external_gateway_added(ri, ex_gw_port)
             # elif not ex_gw_port and ri.ex_gw_port:
             #     self._external_gateway_removed(ri, ri.ex_gw_port)
-
             if ex_gw_port:
                 self._process_router_floating_ips(ri, ex_gw_port)
+                self._set_port_status(ex_gw_port['id'],
+                                      l3_constants.PORT_STATUS_ACTIVE)
 
             ri.ex_gw_port = ex_gw_port
             self._routes_updated(ri)
@@ -432,7 +453,6 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
         existing_floating_ip_ids = set(
             [fip['id'] for fip in ri.floating_ips])
         cur_floating_ip_ids = set([fip['id'] for fip in floating_ips])
-
         id_to_fip_map = {}
 
         LOG.debug(_("CUR FLOATING IPS: %s"), floating_ips)
@@ -488,13 +508,27 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                     fips_to_add.append(new_fip)
 
         for fip in fips_to_remove:
+            self._set_port_status(fip['floating_port_id'],
+                                  l3_constants.PORT_STATUS_DOWN)
             ri.floating_ips.remove(fip)
 
         for fip in fips_to_add:
-            self._floating_ip_added(ri, ex_gw_port,
-                                    fip['floating_ip_address'],
-                                    fip['fixed_ip_address'])
+            try:
+                self._floating_ip_added(ri, ex_gw_port,
+                                        fip['floating_ip_address'],
+                                        fip['fixed_ip_address'])
+            except cfg_exc.CSR1kvConfigException:
+                self._set_port_status(fip['floating_port_id'],
+                                      l3_constants.PORT_STATUS_DOWN)
+                continue
+            self._set_port_status(fip['floating_port_id'],
+                                  l3_constants.PORT_STATUS_ACTIVE)
             ri.floating_ips.append(fip)
+
+    def _set_port_status(self, port_id, status):
+        self.plugin_rpc.device_status_update(self.context,
+                                             port_id,
+                                             status)
 
 
 class RoutingServiceHelperWithPhyContext(

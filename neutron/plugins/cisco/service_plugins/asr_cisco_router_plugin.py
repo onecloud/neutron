@@ -64,6 +64,17 @@ class CiscoRouterPluginRpcCallbacks(n_rpc.RpcCallback,
 
         return "OK"
 
+    def device_status_update(self, context, port_id, status):
+        session = context.session
+        from neutron.db import models_v2
+        with session.begin(subtransactions=True):
+            port = (session.query(models_v2.Port).
+                    filter(models_v2.Port.id.startswith(port_id)).one())
+            if port:
+                port.status = status
+            else:
+                LOG.error(_("Unable to retrieve port object"))
+
 
 class PhysicalCiscoRouterPlugin(common_db_mixin.CommonDbMixin,
                                 agents_db.AgentDbMixin,
