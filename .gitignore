@@ -22,6 +22,7 @@ setuptools*.egg/
 subunit.log
 .testrepository
 .tox/
+.tox
 .venv/
 *.mo
 *.sw?
