@@ -44,6 +44,17 @@ PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
 
 LOG = logging.getLogger(__name__)
 
+metacloud_opts = [
+    cfg.BoolOpt('external_net_as_internal_if',
+                default=True,
+                help='Allow external network as internal interface'),
+    cfg.BoolOpt('internal_net_on_multiple_routers',
+                default=True,
+                help='Allow internal non shared network to attach on multiple '
+                     'routers'),
+]
+cfg.CONF.register_opts(metacloud_opts, group='metacloud')
+
 
 class CiscoPhysicalRouter(model_base.BASEV2, models_v2.HasId):
     """Represents a physical cisco router."""
@@ -210,6 +221,9 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
                           {'router_interface': ha_info})
 
     def add_router_interface(self, context, router_id, interface_info):
+        """MC Changes: Add _validate_router_interface."""
+        self._validate_router_interface(context, interface_info)
+
         info = super(PhysicalL3RouterApplianceDBMixin, self).\
             add_router_interface(context, router_id, interface_info)
 
@@ -228,6 +242,64 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
             self._create_hsrp_interfaces(context, router_id, subnet, ha_const)
 
         return info
+
+    def _validate_router_interface(self, context, interface_info):
+        """Validate router interface."""
+        if not cfg.CONF.metacloud.external_net_as_internal_if:
+            self._validate_external_net_as_internal_if(context,
+                                                       interface_info)
+
+        if not cfg.CONF.metacloud.internal_net_on_multiple_routers:
+            self._validate_internal_net_on_multiple_routers(context,
+                                                            interface_info)
+
+    def _validate_external_net_as_internal_if(self, context, interface_info):
+        if 'subnet_id' in interface_info:
+            subnet_id = interface_info['subnet_id']
+            subnet = self._core_plugin._get_subnet(context, subnet_id)
+            network = self._core_plugin._get_network(context,
+                                                     subnet["network_id"])
+            if network['external'] is None:
+                return
+        elif 'port_id' in interface_info:
+            port_id = interface_info['port_id']
+            port = self._core_plugin._get_port(context, port_id)
+            network = self._core_plugin._get_network(context,
+                                                     port["network_id"])
+            if network['external'] is None:
+                return
+        else:
+            raise n_exc.InvalidInput(msg="subnet_id or port_id is not not "
+                                         "found in network")
+
+        # Raise exception if it reaches here
+        raise n_exc.BadRequest(resource='router',
+                               msg="External network is not allowed to be "
+                                   "used as internal interface")
+
+    def _validate_internal_net_on_multiple_routers(self, context,
+                                                   interface_info):
+        if 'subnet_id' in interface_info:
+            subnet_id = interface_info['subnet_id']
+            subnet = self._core_plugin._get_subnet(context, subnet_id)
+        elif 'port_id' in interface_info:
+            port_id = interface_info['port_id']
+            port = self._core_plugin._get_port(context, port_id)
+
+            if len(port['fixed_ips']) == 0:
+                n_exc.InvalidInput(msg="Missing fixed_ips in subnet")
+
+            subnet_id = port['fixed_ips'][0]['subnet_id']
+            subnet = self._core_plugin._get_subnet(context, subnet_id)
+
+        routers = self.get_routers(context)
+        for router in routers:
+            # fail if one of the routers has subnet collision.
+            router_obj = self._get_router(context, router['id'])
+            self._check_for_dup_router_subnet(context, router_obj,
+                                              subnet['network_id'],
+                                              subnet_id,
+                                              subnet['cidr'])
 
     def remove_router_interface(self, context, router_id, interface_info):
         info = super(PhysicalL3RouterApplianceDBMixin, self).\
