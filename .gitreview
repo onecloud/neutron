@@ -2,4 +2,4 @@
 host=review.metacloud.in
 port=29418
 project=metacloud/neutron.git
-defaultbranch=mc/2014.1.2
+defaultbranch=mc/2014.1.3
