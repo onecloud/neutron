@@ -113,6 +113,25 @@ Description: Neutron is a virtual network service for Openstack - Cisco plugin
  .
  This package provides the Cisco plugin.
 
+Package: neutron-cisco-cfg-agent
+Architecture: all
+Depends:
+ neutron-common (= ${source:Version}),
+ ${misc:Depends},
+ ${python:Depends},
+ ${shlibs:Depends}
+Description: Neutron is a virtual network service for Openstack - Cisco cfg agent
+ Neutron is a virtual network service for Openstack, and a part of
+ Netstack. Just like OpenStack Nova provides an API to dynamically
+ request and configure virtual servers, Neutron provides an API to
+ dynamically request and configure virtual networks. These networks
+ connect "interfaces" from other OpenStack services (e.g., virtual NICs
+ from Nova VMs). The Neutron API supports extensions to provide
+ advanced network capabilities (e.g., QoS, ACLs, network monitoring,
+ etc.)
+ .
+ This package provides the Cisco cfg agent.
+
 Package: neutron-plugin-nec
 Architecture: all
 Provides: neutron-plugin
