@@ -16,8 +16,7 @@ end script
 
 script
   [ -r /etc/default/neutron-server ] && . /etc/default/neutron-server
-  [ -r "$NEUTRON_PLUGIN_CONFIG" ] && CONF_ARG="--config-file $NEUTRON_PLUGIN_CONFIG"
   exec start-stop-daemon --start --chuid neutron --exec /usr/bin/neutron-server -- \
     --config-file /etc/neutron/neutron.conf \
-    --config-file /etc/neutron/neutron-server.conf $CONF_ARG
+    --config-file /etc/neutron/neutron-server.conf $NEUTRON_PLUGIN_CONFIG
 end script
