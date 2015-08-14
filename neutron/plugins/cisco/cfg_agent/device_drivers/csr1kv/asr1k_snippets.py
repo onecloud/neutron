@@ -94,7 +94,7 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s timers 1 3</cmd>
-            <cmd>standby %s name neutron-%s-%s</cmd>
+            <cmd>standby %s name neutron-hsrp-%s-%s</cmd>
         </cli-config-data>
 </config>
 
