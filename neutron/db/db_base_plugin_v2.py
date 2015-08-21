@@ -1087,7 +1087,9 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
         net_id = subnet.get('network_id', None)
         if not net_id:
-            raise n_exc.InvalidInput('Missing network id from subnet')
+            LOG.warn(_("network_id is not found."
+                       "Skip validating subnet count"))
+            return True
 
         subnets = self._get_subnets_by_network(context, net_id)
         if subnets and len(subnets) >= subnet_per_network:

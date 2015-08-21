@@ -59,3 +59,7 @@ class TestNeutronDbPluginV2(base.BaseTestCase):
         mock_get_subnet.return_value = [{}]
         self.assertTrue(db_api._validate_subnet_count(None,
                                                       {'network_id': 123}))
+
+        # If network_id is not presented, don't do validation
+        self.assertTrue(db_api._validate_subnet_count(None,
+                                                      {'subnet_id': 456}))
