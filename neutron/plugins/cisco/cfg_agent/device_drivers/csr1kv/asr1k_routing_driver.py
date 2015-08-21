@@ -898,15 +898,6 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
 
     def _set_ha_HSRP(self, subinterface, vrf_name, priority, group, vlan,
                      ip, is_external=False):
-
-        try:
-            confstr = \
-                asr_snippets.REMOVE_INTC_ASR_HSRP_PREEMPT % (subinterface,
-                                                             group)
-            self._edit_running_config(confstr, "REMOVE_HSRP_PREEMPT")
-        except Exception:
-            pass
-
         if is_external is True:
             confstr = asr_snippets.SET_INTC_ASR_HSRP_EXTERNAL % (subinterface,
                                                                  group,
@@ -916,12 +907,14 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                                                  group,
                                                                  group,
                                                                  group,
-                                                                 vlan)
+                                                                 vlan,
+                                                                 group,
+                                                                 group)
         else:
             confstr = asr_snippets.SET_INTC_ASR_HSRP % (subinterface,
                                                         vrf_name, group,
                                                         priority, group, ip,
-                                                        group)
+                                                        group, group, group)
 
         action = "%s SET_INTC_HSRP (Group: %s, Priority: % s)" % \
                  (self.target_asr['name'], group, priority)

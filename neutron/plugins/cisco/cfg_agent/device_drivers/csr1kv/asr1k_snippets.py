@@ -65,10 +65,11 @@ SET_INTC_ASR_HSRP = """
             <cmd>interface %s</cmd>
             <cmd>vrf forwarding %s</cmd>
             <cmd>standby version 2</cmd>
-            <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s timers 1 3</cmd>
+            <cmd>standby %s preempt</cmd>
+            <cmd>standby %s track 1 decrement 100</cmd>
         </cli-config-data>
 </config>
 
@@ -90,11 +91,12 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
         <cli-config-data>
             <cmd>interface %s</cmd>
             <cmd>standby version 2</cmd>
-            <cmd>standby delay minimum 30 reload 60</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s timers 1 3</cmd>
             <cmd>standby %s name neutron-hsrp-%s-%s</cmd>
+            <cmd>standby %s preempt</cmd>
+            <cmd>standby %s track 1 decrement 100</cmd>
         </cli-config-data>
 </config>
 
@@ -223,10 +225,11 @@ CREATE_SUBINTERFACE_V6_WITH_ID = """
 #=================================================#
 SET_INTC_ASR_HSRP_V6 = """
 <cmd>standby version 2</cmd>
-<cmd>standby delay minimum 30 reload 60</cmd>
 <cmd>standby %s ipv6 autoconfig</cmd>
 <cmd>standby %s priority %s</cmd>
 <cmd>standby %s timers 1 3</cmd>
+<cmd>standby %s preempt</cmd>
+<cmd>standby %s track 1 decrement 100</cmd>
 """
 
 #=================================================#
