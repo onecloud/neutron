@@ -62,6 +62,13 @@ OPTS = [
                 help=_("Use broadcast in DHCP replies")),
 ]
 
+metacloud_opts = [
+    cfg.BoolOpt('force_isolated',
+                default=False,
+                help='If force_isolated is true, we will treat any subnet'
+                     'as an isolated subnet'),
+]
+
 IPV4 = 4
 IPV6 = 6
 UDP = 'udp'
@@ -807,15 +814,18 @@ class Dnsmasq(DhcpLocalProcess):
         gateway. The port must be owned by a nuetron router.
         """
         isolated_subnets = collections.defaultdict(lambda: True)
-        subnets = dict((subnet.id, subnet) for subnet in network.subnets)
 
-        for port in network.ports:
-            if port.device_owner not in (constants.DEVICE_OWNER_ROUTER_INTF,
-                                         constants.DEVICE_OWNER_DVR_INTERFACE):
-                continue
-            for alloc in port.fixed_ips:
-                if subnets[alloc.subnet_id].gateway_ip == alloc.ip_address:
-                    isolated_subnets[alloc.subnet_id] = False
+        if not cfg.CONF.metacloud.force_isolated:
+            subnets = dict((subnet.id, subnet) for subnet in network.subnets)
+
+            for port in network.ports:
+                if port.device_owner not in \
+                        (constants.DEVICE_OWNER_ROUTER_INTF,
+                         constants.DEVICE_OWNER_DVR_INTERFACE):
+                    continue
+                for alloc in port.fixed_ips:
+                    if subnets[alloc.subnet_id].gateway_ip == alloc.ip_address:
+                        isolated_subnets[alloc.subnet_id] = False
 
         return isolated_subnets
 

@@ -617,6 +617,7 @@ def register_options():
     config.register_root_helper(cfg.CONF)
     cfg.CONF.register_opts(dhcp.OPTS)
     cfg.CONF.register_opts(interface.OPTS)
+    cfg.CONF.register_opts(dhcp.metacloud_opts, group='metacloud')
 
 
 def main():
