@@ -91,6 +91,7 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
         <cli-config-data>
             <cmd>interface %s</cmd>
             <cmd>standby version 2</cmd>
+            <cmd>ip nat outside</cmd>
             <cmd>standby %s priority %s</cmd>
             <cmd>standby %s ip %s</cmd>
             <cmd>standby %s timers 1 3</cmd>

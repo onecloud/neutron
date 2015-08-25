@@ -33,4 +33,3 @@ oslo.messaging==1.5.1.11
 oslo.rootwrap==1.4.0
 
 python-novaclient==2.20.0
-
