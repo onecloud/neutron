@@ -523,6 +523,7 @@ class TestDhcpAgentEventHandler(base.BaseTestCase):
     def setUp(self):
         super(TestDhcpAgentEventHandler, self).setUp()
         config.register_interface_driver_opts_helper(cfg.CONF)
+        dhcp_agent.register_options()
         cfg.CONF.register_opts(dhcp.OPTS)
         cfg.CONF.set_override('interface_driver',
                               'neutron.agent.linux.interface.NullDriver')
