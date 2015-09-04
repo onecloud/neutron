@@ -388,6 +388,12 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             old_gw_ports, new_gw_ports = \
                 self._get_port_set_diffs(ri.ha_gw_ports, gw_ports)
 
+            # Removing internal and external networks must be done
+            # before adding new networks
+            for p in old_ports:
+                self._internal_network_removed(ri, p, ri.ex_gw_port)
+                ri.internal_ports.remove(p)
+
             for p in new_ports:
                 self._set_subnet_info(p)
                 try:
@@ -399,9 +405,9 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 ri.internal_ports.append(p)
                 self._set_port_status(p['id'], l3_constants.PORT_STATUS_ACTIVE)
 
-            for p in old_ports:
-                self._internal_network_removed(ri, p, ri.ex_gw_port)
-                ri.internal_ports.remove(p)
+            for p in old_gw_ports:
+                self._external_gateway_removed(ri, p)
+                ri.ha_gw_ports.remove(p)
 
             for p in new_gw_ports:
                 self._set_subnet_info(p)
@@ -413,10 +419,6 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                     continue
                 ri.ha_gw_ports.append(p)
                 self._set_port_status(p['id'], l3_constants.PORT_STATUS_ACTIVE)
-
-            for p in old_gw_ports:
-                self._external_gateway_removed(ri, p)
-                ri.ha_gw_ports.remove(p)
 
             # if ex_gw_port and not ri.ex_gw_port:
             #     self._set_subnet_info(ex_gw_port)

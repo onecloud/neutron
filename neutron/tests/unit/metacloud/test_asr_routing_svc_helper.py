@@ -33,6 +33,12 @@ class TestPhyRouterContext(base.BaseTestCase):
     def test_port_status_update(self, mock_port_status, mock_gateway,
                                 mock_floating, mock_external, mock_net_remove,
                                 mock_updated, mock_add, mock_info, mock_diffs):
+        manager = mock.MagicMock()
+        manager.attach_mock(mock_net_remove, "mock_net_remove")
+        manager.attach_mock(mock_add, "mock_add")
+        manager.attach_mock(mock_gateway, "mock_gateway")
+        manager.attach_mock(mock_external, "mock_external")
+
         router = {}
         router['ha_info'] = "NA"
         router['_floatingips'] = [{'router_id': 123,
@@ -76,3 +82,17 @@ class TestPhyRouterContext(base.BaseTestCase):
                                            mock.call(2, 'DOWN'),
                                            mock.call(4, 'ACTIVE'),
                                            mock.call(5, 'ACTIVE')])
+
+        # verfiy the call orders
+        expected_call_orders = [mock.call.mock_net_remove(ri, {'id': 1}, None),
+                                mock.call.mock_add(ri, {'id': 2}, {'id': 5}),
+                                mock.call.mock_gateway(ri, {'id': 3}),
+                                mock.call.mock_external(ri, {'id': 4}),
+                                mock.call.mock_net_remove(ri,
+                                                          {'id': 1},
+                                                          {'id': 5}),
+                                mock.call.mock_add(ri, {'id': 2}, {'id': 5}),
+                                mock.call.mock_gateway(ri, {'id': 3}),
+                                mock.call.mock_external(ri, {'id': 4})]
+
+        self.assertEqual(manager.mock_calls, expected_call_orders)
