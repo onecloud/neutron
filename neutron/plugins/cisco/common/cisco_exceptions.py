@@ -229,3 +229,8 @@ class ProfileTenantBindingNotFound(exceptions.NotFound):
 class NoClusterFound(exceptions.NotFound):
     """No service cluster found to perform multi-segment bridging."""
     message = _("No service cluster found to perform multi-segment bridging.")
+
+
+class MappingIDPoolExhausted(exceptions.NeutronException):
+    """SNAT mapping ID pool exhausted."""
+    message = _("SNAT mapping ID pool exhausted.")

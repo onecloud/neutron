@@ -50,6 +50,7 @@ from neutron.db.vpn import vpn_db  # noqa
 from neutron.plugins.bigswitch.db import consistency_db  # noqa
 from neutron.plugins.bigswitch import routerrule_db  # noqa
 from neutron.plugins.brocade.db import models as brocade_models  # noqa
+from neutron.plugins.cisco.db.l3 import asr_l3_router_appliance_db  # noqa
 from neutron.plugins.cisco.db.l3 import l3_models  # noqa
 from neutron.plugins.cisco.db import n1kv_models_v2  # noqa
 from neutron.plugins.cisco.db import network_models_v2  # noqa

@@ -28,6 +28,7 @@ from neutron.extensions import providernet as pr_net
 from neutron.openstack.common import lockutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.common import cisco_constants as c_const
+from neutron.plugins.cisco.common import cisco_exceptions as cexc
 from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
 from neutron.plugins.cisco.l3.rpc import asr_l3_router_rpc_joint_agent_api as \
     asr_api
@@ -44,6 +45,9 @@ PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
 
 LOG = logging.getLogger(__name__)
 
+MIN_MAPPING_ID = 1
+MAX_MAPPING_ID = 2 ** 31 - 1
+
 metacloud_opts = [
     cfg.BoolOpt('external_net_as_internal_if',
                 default=True,
@@ -52,7 +56,16 @@ metacloud_opts = [
                 default=True,
                 help='Allow internal non shared network to attach on multiple '
                      'routers'),
+    cfg.IntOpt('min_mapping_id',
+               default=MIN_MAPPING_ID,
+               help="The minimum mapping ID used to identify which NAT "
+                    "translation rules are sent to SNAT peers."),
+    cfg.IntOpt('max_mapping_id',
+               default=MAX_MAPPING_ID,
+               help="The maximum mapping ID used to identify which NAT "
+                    "translation rules are sent to SNAT peers."),
 ]
+
 cfg.CONF.register_opts(metacloud_opts, group='metacloud')
 
 
@@ -86,9 +99,56 @@ class CiscoPhyRouterPortBinding(model_base.BASEV2):
                                         ondelete='CASCADE'))
 
 
+class ASR1kSNATMapping(model_base.BASEV2):
+    """Mapping IDs of the SNAT config.
+
+    The mapping IDs are used to identify which NAT translation rules are
+    sent to SNAT peers.
+    """
+
+    __tablename__ = 'cisco_asr1k_snat_mapping'
+
+    mapping_id = sa.Column(sa.Integer, nullable=False, primary_key=True,
+                           autoincrement=False)
+
+    port_id = sa.Column(sa.String(36),
+                        sa.ForeignKey('ports.id',
+                                      ondelete="CASCADE"),
+                        nullable=False)
+
+
 class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
                                        L3RouterApplianceDBMixin,
                                        l3_db.L3RpcNotifierMixin):
+
+    def __init__(self, *args, **kwargs):
+        super(PhysicalL3RouterApplianceDBMixin, self).__init__(
+            *args, **kwargs)
+        self._validate_mapping_id_config()
+
+    def _validate_mapping_id_config(self):
+        """Validate the mapping IDs config.
+
+        Validate the boundaries of the mapping ID pool:
+        metacloud.min_mapping_id and metacloud.max_mapping_id.
+        """
+        if cfg.CONF.metacloud.min_mapping_id < MIN_MAPPING_ID:
+            raise cfg.Error(
+                "Invalid config value for 'min_mapping_id'; the "
+                "value must be >= %d." % MIN_MAPPING_ID)
+        if cfg.CONF.metacloud.max_mapping_id > MAX_MAPPING_ID:
+            raise cfg.Error(
+                "Invalid config value for 'max_mapping_id'; the "
+                "value must be <= %d." % MAX_MAPPING_ID)
+        conf = cfg.CONF.metacloud
+        inverted_boundaries = (
+            conf.min_mapping_id > conf.max_mapping_id
+        )
+        if inverted_boundaries:
+            raise cfg.Error(
+                "Invalid config value for 'max_mapping_id' and "
+                "'min_mapping_id'; 'min_mapping_id' must be <= "
+                "'max_mapping_id'.")
 
     @property
     def l3_cfg_rpc_notifier(self):
@@ -981,3 +1041,59 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
                'status': floatingip['status'],
                'floating_port_id': floatingip['floating_port_id']}
         return self._fields(res, fields)
+
+    def _get_or_create_SNAT_mapping(self, context, port_id):
+        """
+        Create and persist a SNAT mapping or retrieve an existing
+        mapping if it already exists.
+
+        :param context: neutron api request context
+        :param port_id: Port associated with the mapping.
+
+        :returns: The ID of the created mapping.
+        """
+        session = context.session
+        Mapping = ASR1kSNATMapping
+
+        # Return the mapping id if a mapping for this port already exists.
+        mapping = session.query(Mapping).filter_by(port_id=port_id).first()
+        if mapping is not None:
+            return mapping.mapping_id
+
+        # No mapping exists: create it.
+        with session.begin(subtransactions=True):
+            Mapping2 = sa.orm.aliased(Mapping)
+            # Reuse deleted mapping IDs.
+            # Find the first Mapping object which doesn't have a successor
+            # (i.e. a mapping for which there is no Mapping with a
+            # mapping_id of mapping_id + 1).
+            # To avoid trying to insert the same mapping ID twice, lock the
+            # mapping objects without a successor.
+            first_without_successor = session.query(Mapping).filter(
+                ~sa.sql.exists().where(
+                    Mapping2.mapping_id == Mapping.mapping_id + 1)).order_by(
+                        Mapping.mapping_id).with_lockmode('update').first()
+            if first_without_successor is not None:
+                new_mapping_id = first_without_successor.mapping_id + 1
+            else:
+                new_mapping_id = cfg.CONF.metacloud.min_mapping_id
+
+            if new_mapping_id > cfg.CONF.metacloud.max_mapping_id:
+                raise cexc.MappingIDPoolExhausted()
+
+            new_mapping = Mapping(port_id=port_id, mapping_id=new_mapping_id)
+            session.add(new_mapping)
+            return new_mapping_id
+
+    def _delete_SNAT_mapping(self, context, port_id):
+        """
+        Delete a SNAT mapping.
+
+        :param context: neutron api request context
+        :param port_id: Port associated with the mapping.
+        """
+        session = context.session
+        Mapping = ASR1kSNATMapping
+
+        with session.begin(subtransactions=True):
+            session.query(Mapping).filter_by(port_id=port_id).delete()
