@@ -588,13 +588,17 @@ class RoutingServiceHelper():
                 driver.disable_internal_network_NAT(ri, port, ex_gw_port)
         driver.external_gateway_removed(ri, ex_gw_port)
 
-    def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                           mapping_id=None):
         driver = self._drivermgr.get_driver(ri.id)
-        driver.floating_ip_added(ri, ex_gw_port, floating_ip, fixed_ip)
+        driver.floating_ip_added(ri, ex_gw_port, floating_ip, fixed_ip,
+                                 mapping_id)
 
-    def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                             mapping_id=None):
         driver = self._drivermgr.get_driver(ri.id)
-        driver.floating_ip_removed(ri, ex_gw_port, floating_ip, fixed_ip)
+        driver.floating_ip_removed(ri, ex_gw_port, floating_ip, fixed_ip,
+                                   mapping_id)
 
     def _routes_updated(self, ri):
         """Update the state of routes in the router.

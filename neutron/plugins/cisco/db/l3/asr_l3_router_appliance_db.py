@@ -289,6 +289,8 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
 
         LOG.info(_("finished parent add_router_interface, info:%s"), info)
 
+        self._get_or_create_SNAT_mapping(context, info['port_id'])
+
         # If no exception has been raised, we're good to go
         subnet_id = info['subnet_id']
         subnet = self._core_plugin._get_subnet(context, subnet_id)
@@ -365,6 +367,8 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
         info = super(PhysicalL3RouterApplianceDBMixin, self).\
             remove_router_interface(context, router_id, interface_info)
         LOG.info(_("finished parent remove_router_interface, info:%s"), info)
+
+        self._delete_SNAT_mapping(context, info['port_id'])
 
         # If no exception has been raised, we're good to go
         subnet_id = info['subnet_id']
@@ -732,11 +736,10 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
         self.l3_cfg_rpc_notifier.routers_updated(context, routers)
         return router_updated
 
-    def _process_sync_data(self, routers, interfaces, floating_ips,
-                           ha_gw_interfaces= []):
+    def _process_sync_data(self, context, routers, interfaces, floating_ips,
+                           ha_gw_interfaces=[]):
         # begin benchmarking
         start_time = time.time()
-
         routers_dict = {}
         for router in routers:
             routers_dict[router['id']] = router
@@ -746,12 +749,24 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
             if router:
                 router_floatingips = router.get(l3_const.FLOATINGIP_KEY,
                                                 [])
+
+                mapping_id = self._get_or_create_SNAT_mapping(context,
+                    floating_ip['floating_port_id'])
+                floating_ip['mapping_id'] = mapping_id
+
                 router_floatingips.append(floating_ip)
                 router[l3_const.FLOATINGIP_KEY] = router_floatingips
         for interface in interfaces:
             router = routers_dict.get(interface['device_id'])
             if router:
                 router_interfaces = router.get(l3_const.INTERFACE_KEY, [])
+
+                if_const = l3_const.DEVICE_OWNER_ROUTER_INTF
+                if interface['device_owner'] == if_const:
+                    map_id = self._get_or_create_SNAT_mapping(context,
+                                                              interface['id'])
+                    interface['mapping_id'] = map_id
+
                 router_interfaces.append(interface)
                 router[l3_const.INTERFACE_KEY] = router_interfaces
 
@@ -856,7 +871,8 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
             LOG.info(_("get_sync_data total time: %s"),
                      (cur_time2 - start_time))
 
-        return self._process_sync_data(routers, interfaces, floating_ips,
+        return self._process_sync_data(context, routers, interfaces,
+                                       floating_ips,
                                        ha_gw_interfaces)
 
     def get_sync_data_ext(self, context, router_ids=None, active=None):
@@ -1097,3 +1113,18 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
 
         with session.begin(subtransactions=True):
             session.query(Mapping).filter_by(port_id=port_id).delete()
+
+    def update_floatingip(self, context, id, floatingip):
+        fip_info = super(
+            PhysicalL3RouterApplianceDBMixin, self).update_floatingip(
+            context, id, floatingip)
+
+        if fip_info['port_id']:
+            # floating ip is associated
+            self._get_or_create_SNAT_mapping(context,
+                                             fip_info['floating_port_id'])
+        else:
+            self._delete_SNAT_mapping(context,
+                                      fip_info['floating_port_id'])
+
+        return fip_info

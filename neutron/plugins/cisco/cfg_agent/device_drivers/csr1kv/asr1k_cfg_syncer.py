@@ -19,6 +19,8 @@ import netaddr
 import re
 import xml.etree.ElementTree as ET
 
+from oslo.config import cfg
+
 from neutron.common import constants
 from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import \
@@ -88,6 +90,12 @@ INTF_V6_ADDR_REGEX = "\s*ipv6 address ([0-9A-Fa-f:]+)\/(\d+)"
 
 XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data></config>"
 XML_CMD_TAG = "<cmd>%s</cmd>"
+
+RG_REGEX = re.compile("redundancy group")
+RG_RII_REGEX = re.compile("redundancy rii")
+RG_VIP_REGEX = re.compile(
+    "redundancy group (\d) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+    "exclusive decrement (\d{1,5})")
 
 
 def is_port_v6(port):
@@ -880,7 +888,7 @@ class ConfigSyncer(object):
 
         return False
 
-    def subintf_hsrp_ip_check(self, intf_list, is_external, ip_addr):
+    def subintf_virtual_ip_check(self, intf_list, is_external, ip_addr):
         if is_external:
             target_type = constants.DEVICE_OWNER_ROUTER_GW
         else:
@@ -959,9 +967,53 @@ class ConfigSyncer(object):
         hsrp_vip_cfg = hsrp_vip_cfg_list[0]
         match_obj = re.match(HSRP_V4_VIP_REGEX, hsrp_vip_cfg.text)
         hsrp_vip_grp_num, hsrp_vip = match_obj.group(1, 2)
-        return self.subintf_hsrp_ip_check(intf_segment_dict[intf.segment_id],
-                                          intf.is_external,
-                                          hsrp_vip)
+        return self.subintf_virtual_ip_check(
+            intf_segment_dict[intf.segment_id], intf.is_external, hsrp_vip)
+
+    def clean_interface_ipv4_rg_check(self, intf, intf_segment_dict):
+        """Check whether the interface has valid redundancy group config.
+
+        We check couple things here.
+        1. Configured rii value must be same as vlan ID
+        2. Configured VIP must match the Neutron port one.
+
+        :param intf: ciscoconfparse interface object
+        :param intf_segment_dict: neutron port dict
+        :return: True if the interface has valid redundancy group config.
+                 False otherwise.
+        """
+        rii = intf.re_search_children(RG_RII_REGEX)
+        if rii == []:
+            LOG.info(_("Missing RII config"))
+            return False
+
+        dot1q = intf.re_search_children(DOT1Q_REGEX)
+        if dot1q == []:
+            LOG.info(_("Missing VLAN ID config"))
+            return False
+
+        rii_val = rii[0].text.split()[-1]
+        vlan_id = dot1q[0].text.split()[-1]
+
+        if vlan_id != rii_val:
+            LOG.warn(_(
+                "VLAN ID: %(vlan) and RII: %(rii) Value mismatch"),
+                     {"vlan": vlan_id, "rii": rii_val})
+            return False
+
+        group = intf.re_search_children(RG_REGEX)
+        if group == []:
+            LOG.warn(_("Missing redundancy group config"))
+            return False
+
+        match_obj = re.match(RG_VIP_REGEX, group[0].text.strip())
+        if not match_obj:
+            LOG.warn(_("Misconfigured redundancy group"))
+            return False
+
+        vip = match_obj.group(2)
+        return self.subintf_virtual_ip_check(
+            intf_segment_dict[intf.segment_id], intf.is_external, vip)
 
     def clean_interfaces_ipv4_check(self, intf, intf_segment_dict):
         # Check that real IP address is correct
@@ -1109,33 +1161,40 @@ class ConfigSyncer(object):
                                                         intf_segment_dict):
                     pending_delete_list.append(intf)
                     continue
-                if not self.clean_interfaces_ipv4_hsrp_check(
-                        intf, intf_segment_dict):
-                    pending_delete_list.append(intf)
-                    continue
+                if not cfg.CONF.general.use_stateful_nat:
+                    if not self.clean_interfaces_ipv4_hsrp_check(
+                            intf, intf_segment_dict):
+                        pending_delete_list.append(intf)
+                        continue
+                else:
+                    if not self.clean_interface_ipv4_rg_check(
+                            intf, intf_segment_dict):
+                        LOG.warn(_("Interface has invalid redundancy group "
+                                   "config. Deleting"))
+                        pending_delete_list.append(intf)
+                        continue
             else:
                 if not self.clean_interfaces_ipv6_check(intf,
                                                         intf_segment_dict):
                     pending_delete_list.append(intf)
                     continue
 
-            # Delete if there's any hsrp config with wrong group number
-            # del_hsrp_cmd = XML_CMD_TAG % (intf.text)
-            hsrp_cfg_list = intf.re_search_children(HSRP_REGEX)
-            needs_hsrp_delete = False
-            for hsrp_cfg in hsrp_cfg_list:
-                hsrp_num = int(hsrp_cfg.re_match(HSRP_REGEX, group=1))
-                if hsrp_num != correct_grp_num:
-                    needs_hsrp_delete = True
-                    #del_hsrp_cmd += XML_CMD_TAG % ("no %s" % (hsrp_cfg.text))
+            # We don't check group number for stateful NAT as the group number
+            # is fixed
+            if not cfg.CONF.general.use_stateful_nat:
+                # Delete if there's any hsrp config with wrong group number
+                # del_hsrp_cmd = XML_CMD_TAG % (intf.text)
+                hsrp_cfg_list = intf.re_search_children(HSRP_REGEX)
+                needs_hsrp_delete = False
+                for hsrp_cfg in hsrp_cfg_list:
+                    hsrp_num = int(hsrp_cfg.re_match(HSRP_REGEX, group=1))
+                    if hsrp_num != correct_grp_num:
+                        needs_hsrp_delete = True
 
-            if needs_hsrp_delete:
-                LOG.info(_("Bad HSRP config for interface, deleting"))
-                pending_delete_list.append(intf)
-                continue
-                #confstr = XML_FREEFORM_SNIPPET % (del_hsrp_cmd)
-                #LOG.info("Deleting bad HSRP config: %s" % (confstr))
-                #rpc_obj = conn.edit_config(target='running', config=confstr)
+                if needs_hsrp_delete:
+                    LOG.info(_("Bad HSRP config for interface, deleting"))
+                    pending_delete_list.append(intf)
+                    continue
 
             self.existing_cfg_dict['interfaces'][intf.segment_id] = intf.text
 

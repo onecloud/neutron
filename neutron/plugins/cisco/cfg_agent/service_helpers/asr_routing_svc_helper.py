@@ -420,11 +420,6 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 ri.ha_gw_ports.append(p)
                 self._set_port_status(p['id'], l3_constants.PORT_STATUS_ACTIVE)
 
-            # if ex_gw_port and not ri.ex_gw_port:
-            #     self._set_subnet_info(ex_gw_port)
-            #     self._external_gateway_added(ri, ex_gw_port)
-            # elif not ex_gw_port and ri.ex_gw_port:
-            #     self._external_gateway_removed(ri, ri.ex_gw_port)
             if ex_gw_port:
                 self._process_router_floating_ips(ri, ex_gw_port)
                 self._set_port_status(ex_gw_port['id'],
@@ -486,7 +481,8 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 fips_to_remove.append(fip)
                 self._floating_ip_removed(ri, ri.ex_gw_port,
                                           fip['floating_ip_address'],
-                                          fip['fixed_ip_address'])
+                                          fip['fixed_ip_address'],
+                                          fip['mapping_id'])
 
             else:
                 # handle remapping of a floating IP
@@ -503,9 +499,11 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 if (new_fixed_ip and existing_fixed_ip and
                         new_fixed_ip != existing_fixed_ip):
                     floating_ip = fip['floating_ip_address']
+                    mapping_id = fip['mapping_id']
                     self._floating_ip_removed(ri, ri.ex_gw_port,
                                               floating_ip,
-                                              existing_fixed_ip)
+                                              existing_fixed_ip,
+                                              mapping_id)
                     fips_to_remove.append(fip)
                     fips_to_add.append(new_fip)
 
@@ -518,7 +516,8 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             try:
                 self._floating_ip_added(ri, ex_gw_port,
                                         fip['floating_ip_address'],
-                                        fip['fixed_ip_address'])
+                                        fip['fixed_ip_address'],
+                                        fip['mapping_id'])
             except cfg_exc.CSR1kvConfigException:
                 self._set_port_status(fip['floating_port_id'],
                                       l3_constants.PORT_STATUS_DOWN)

@@ -45,6 +45,14 @@ LOG = logging.getLogger(__name__)
 
 DEFAULT_IPV6_MTU = 9216
 
+ROUTER_APPLIANCE_OPTS = [
+    cfg.BoolOpt('use_stateful_nat',
+                default=True,
+                help='Whether to use stateful NAT config or not'),
+]
+
+cfg.CONF.register_opts(ROUTER_APPLIANCE_OPTS, group='general')
+
 
 ############################################################
 # override some CSR1kv methods to work with physical ASR1k #
@@ -312,8 +320,15 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                     self._set_nat_pool(ri, ex_gw_port, True)
                     self._csr_remove_default_route(ri, ex_gw_ip, ex_gw_port)
 
-    def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
-        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip)
+    def floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                          mapping_id):
+        self._csr_add_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip,
+                                  mapping_id)
+
+    def floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                            mapping_id):
+        self._csr_remove_floating_ip(ri, ex_gw_port, floating_ip, fixed_ip,
+                                     mapping_id)
 
     def disable_internal_network_NAT(self, ri, port, ex_gw_port,
                                      intf_delete=False):
@@ -457,8 +472,12 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._create_subinterface(subinterface, vlan, vrf_name,
                                   hsrp_ip, netmask, is_external)
 
-        # Always do HSRP
-        self._csr_add_ha_HSRP(ri, port, gateway_ip, is_external)
+        # Always configurate router HA configuration as there will be two ASRs
+        if cfg.CONF.general.use_stateful_nat:
+            self._csr_add_redundancy_group(port, vlan, gateway_ip, ri,
+                                           is_external)
+        else:
+            self._csr_add_ha_HSRP(ri, port, gateway_ip, is_external)
 
     def _csr_remove_subinterface(self, port):
         if not self._is_port_v6(port):
@@ -473,7 +492,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
             LOG.debug(_("IPv6 port, no NAT add needed"))
             return
 
-        if not self._port_needs_config(port):
+        if not self._is_config_valid_for_internal_nat(port):
             return
 
         vrf_name = self._csr_get_vrf_name(ri)
@@ -490,7 +509,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         self._nat_rules_for_internet_access(acl_no, internal_net,
                                             netmask, inner_intfc,
                                             outer_intfc, vrf_name, in_vlan,
-                                            out_vlan)
+                                            out_vlan, port)
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port,
                                          intf_delete=False):
@@ -543,15 +562,17 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         subinterface = self._get_interface_name_from_hosting_port(gw_port)
         self._remove_default_static_route(gw_ip, vrf_name, subinterface)
 
-    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _csr_add_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                             mapping_id):
         vrf_name = self._csr_get_vrf_name(ri)
         #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
         hsrp_grp = self._get_hsrp_grp_num_from_net_id(ex_gw_port['network_id'])
 
         self._add_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp,
-                              ex_gw_port)
+                              ex_gw_port, mapping_id)
 
-    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip):
+    def _csr_remove_floating_ip(self, ri, ex_gw_port, floating_ip, fixed_ip,
+                                mapping_id):
         vrf_name = self._csr_get_vrf_name(ri)
         self._get_interface_name_from_hosting_port(ex_gw_port)
         #hsrp_grp = self._get_hsrp_grp_num_from_ri(ri)
@@ -563,7 +584,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         # self._remove_dyn_nat_translations()
         # Remove the floating ip
         self._remove_floating_ip(floating_ip, fixed_ip, vrf_name, hsrp_grp,
-                                 ex_gw_port)
+                                 ex_gw_port, mapping_id)
         # Enable NAT on outer interface
         # self._add_interface_nat(out_intfc_name, 'outside')
 
@@ -614,6 +635,33 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         subinterface = self._get_interface_name_from_hosting_port(port)
         self._set_ha_HSRP(subinterface, vrf_name, priority, group, vlan, ip,
                           is_external)
+
+    def _csr_add_redundancy_group(self, port, vlan, gateway_ip, ri,
+                                  is_external):
+        """Config ASR1K with Stateful NAT subinterface."""
+        if not self._port_needs_config(port):
+            return
+
+        if 'redundancy_group' not in self.target_asr:
+            LOG.warn(_("Missing redundancy_group in ASR config."
+                     "Skip applying redundancy config"))
+            return
+
+        vlan = self._get_interface_vlan_from_hosting_port(port)
+        rg = self.target_asr['redundancy_group']
+        sub_if = self._get_interface_name_from_hosting_port(port)
+        vrf_name = self._csr_get_vrf_name(ri)
+
+        if not is_external:
+            confstr = asr_snippets.SET_ASR_REDUNDANCY_GROUP_INTERNAL % (
+                sub_if, vrf_name, vlan, rg, gateway_ip)
+        else:
+            confstr = asr_snippets.SET_ASR_REDUNDANCY_GROUP_EXTERNAL % (
+                sub_if, vlan, rg, gateway_ip)
+
+        action = "%s SET_ASR_REDUNDANCY_GROUP (Group: %s, vlan: % s)" % (
+            self.target_asr['name'], rg, vlan)
+        self._edit_running_config(confstr, action)
 
     ###### Internal "Action" Functions ########
     def _set_nat_pool(self, ri, gw_port, is_delete):
@@ -723,7 +771,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                                        netmask,
                                        inner_intfc,
                                        outer_intfc,
-                                       vrf_name, in_vlan, out_vlan):
+                                       vrf_name, in_vlan, out_vlan, port):
         """Configure the NAT rules for an internal network.
 
            refer to comments in parent class
@@ -750,11 +798,20 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                 LOG.info(_("Skip cfg for existing dynamic NAT rule"))
                 pass
             else:
-                pool_name = "%s_nat_pool" % (vrf_name)
-                #confstr = snippets.SET_DYN_SRC_TRL_INTFC %
-                # (acl_no, outer_intfc, vrf_name)
-                confstr = asr_snippets.SET_DYN_SRC_TRL_POOL % (
-                    acl_no, pool_name, vrf_name)
+                if cfg.CONF.general.use_stateful_nat:
+                    if not self._is_config_valid_for_stateful_nat(port):
+                        return
+
+                    pool_name = "%s_nat_pool" % (vrf_name)
+                    rg = self.target_asr['redundancy_group']
+                    mapping_id = port['mapping_id']
+                    confstr = asr_snippets.SET_DYN_SRC_TRL_POOL_RG % (
+                        acl_no, pool_name, rg, mapping_id, vrf_name)
+                else:
+                    pool_name = "%s_nat_pool" % (vrf_name)
+                    confstr = asr_snippets.SET_DYN_SRC_TRL_POOL % (
+                        acl_no, pool_name, vrf_name)
+
                 rpc_obj = conn.edit_config(target='running', config=confstr)
                 self._check_response(rpc_obj,
                                      '%s CREATE_DYN_NAT' %
@@ -830,7 +887,7 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                              self.target_asr['name'])
 
     def _add_floating_ip(self, floating_ip, fixed_ip, vrf,
-                         hsrp_grp, ex_gw_port):
+                         hsrp_grp, ex_gw_port, mapping_id):
         """
         To implement a floating ip, an ip static nat is configured in
         the underlying router ex_gw_port contains data to derive the vlan
@@ -840,27 +897,38 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
         """
         conn = self._get_connection()
         vlan = ex_gw_port['hosting_info']['segmentation_id']
-        # hsrp_grp = vlan
 
         if self._fullsync and floating_ip in \
                 self._existing_cfg_dict['static_nat']:
             LOG.info(_("Skip cfg for existing floating IP"))
             return
 
-        confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (
-            fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+        rg = self.target_asr['redundancy_group']
+
+        if cfg.CONF.general.use_stateful_nat:
+            confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH_RG % (
+                fixed_ip, floating_ip, vrf, rg, mapping_id)
+        else:
+            confstr = asr_snippets.SET_STATIC_SRC_TRL_NO_VRF_MATCH % (
+                fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj,
                              '%s SET_STATIC_SRC_TRL' % self.target_asr['name'])
 
     def _remove_floating_ip(self, floating_ip, fixed_ip, vrf,
-                            hsrp_grp, ex_gw_port):
+                            hsrp_grp, ex_gw_port, mapping_id):
         conn = self._get_connection()
         vlan = ex_gw_port['hosting_info']['segmentation_id']
-        # hsrp_grp = vlan
 
-        confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (
-            fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+        if cfg.CONF.general.use_stateful_nat:
+            rg = self.target_asr['redundancy_group']
+            confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH_RG % (
+                fixed_ip, floating_ip, vrf, rg, mapping_id)
+        else:
+            confstr = asr_snippets.REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH % (
+                fixed_ip, floating_ip, vrf, hsrp_grp, vlan)
+
         rpc_obj = conn.edit_config(target='running', config=confstr)
         self._check_response(rpc_obj,
                              '%s REMOVE_STATIC_SRC_TRL' %
@@ -1078,3 +1146,33 @@ class ASR1kRoutingDriver(csr1kv_driver.CSR1kvRoutingDriver):
                            'user': asr_user,
                            'timeout': self._timeout, 'reason': e.message}
             raise cfg_exc.CSR1kvConnectionException(**conn_params)
+
+    def _is_config_valid_for_stateful_nat(self, port):
+        """ General checking for stateful nat config."""
+        if 'redundancy_group' not in self.target_asr:
+            LOG.warn(_("Missing redundancy_group in ASR config."
+                       "Skip applying configuration"))
+            return False
+
+        if 'mapping_id' not in port:
+            LOG.warn(_("Missing mapping ID from external port."
+                       "Skip applying configuration"))
+            return False
+
+        return True
+
+    def _is_config_valid_for_internal_nat(self, port):
+        """ Function to determine which port will be used for programming
+        internal NAT.
+
+        For HSRP mode, we will use the HA port. For stateful NAT mode, we will
+        use the VIP port. The reason of using VIP port is that the mapping
+        id is resided in the VIP port which is shared across the ASRs. Since
+        all the information (such as VRF, VLAN) is the same between HA ports
+        and VIP port (and VIP port has an extra mapping ID), it is ok to use
+        VIP port to program internal NAT
+        """
+        if cfg.CONF.general.use_stateful_nat:
+            return port['device_owner'] == constants.DEVICE_OWNER_ROUTER_INTF
+        else:
+            return self._port_needs_config(port)

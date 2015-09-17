@@ -23,6 +23,7 @@ from neutron.db import models_v2
 from neutron.plugins.cisco.common import cisco_exceptions as cexc
 from neutron.plugins.cisco.db.l3 import asr_l3_router_appliance_db as db
 from neutron.tests import base
+from neutron.tests.unit.metacloud import test_cfg
 from neutron.tests.unit import test_db_plugin as test_plugin
 from neutron.tests.unit import testlib_api
 
@@ -34,7 +35,7 @@ class FakePlugin(object):
         self.network = None
 
     def _get_subnet(self, context, subnet_id):
-        return {'network_id': 1234, 'cidr': '10.0.0.0/24'}
+        return {'network_id': 1234, 'cidr': '10.0.0.0/24', 'ip_version': 4}
 
     def _get_network(self, context, subnet_id):
         return self.network
@@ -118,6 +119,107 @@ class TestPhysicalL3RouterApplianceDBMixin(base.BaseTestCase):
                           db_api._validate_router_interface,
                           None,
                           {"subnet_id": 1234})
+
+    @mock.patch('neutron.manager.NeutronManager.get_plugin')
+    @mock.patch('neutron.plugins.cisco.db.l3.l3_router_appliance_db.'
+                'L3RouterApplianceDBMixin.add_router_interface')
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._get_or_create_SNAT_mapping')
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._create_hsrp_interfaces')
+    def test_mapping_id_created_for_router_added(self, create_hsrp,
+                                                 get_mapping, add_router_if,
+                                                 mock_plugin):
+        """Test mapping id is added when router is added."""
+        mock_plugin.return_value = FakePlugin()
+        db_api = db.PhysicalL3RouterApplianceDBMixin()
+
+        add_router_if.return_value = {'port_id': 1234, 'subnet_id': 1}
+
+        ctx = context.get_admin_context()
+        db_api.add_router_interface(ctx, '1234', {})
+        get_mapping.assert_called_once_with(ctx, 1234)
+
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._delete_hsrp_interfaces')
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._delete_SNAT_mapping')
+    @mock.patch('neutron.manager.NeutronManager.get_plugin')
+    @mock.patch('neutron.plugins.cisco.db.l3.l3_router_appliance_db.'
+                'L3RouterApplianceDBMixin.remove_router_interface')
+    def test_mapping_id_deleted_for_router_deleted(self, remove_if,
+                                                   mock_plugin, del_snat,
+                                                   del_hsrp):
+        """Test mapping id is deleted when router is deleted."""
+        mock_plugin.return_value = FakePlugin()
+        db_api = db.PhysicalL3RouterApplianceDBMixin()
+
+        remove_if.return_value = {'port_id': 456, 'subnet_id': 1}
+        ctx = context.get_admin_context()
+        db_api.remove_router_interface(ctx, 1234, {})
+
+        del_snat.assert_called_once_with(ctx, 456)
+
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._get_or_create_SNAT_mapping')
+    def test_process_sync_data(self, snat_map):
+        """Test mapping id is added in the router dict."""
+        db_api = db.PhysicalL3RouterApplianceDBMixin()
+
+        vlans = [random.randint(1000, 2000), random.randint(1000, 2000),
+                 random.randint(1000, 2000)]
+
+        snat_map.side_effect = vlans
+
+        ctx = context.get_admin_context()
+        router_dict = db_api._process_sync_data(ctx, test_cfg.routers_data_1,
+                                                test_cfg.interfaces_1,
+                                                test_cfg.floating_ips_1)
+
+        self.assertEqual(vlans[0],
+                         router_dict[1]['_floatingips'][0]['mapping_id'])
+        self.assertEqual(vlans[1],
+                         router_dict[1]['_interfaces'][0]['mapping_id'])
+        self.assertEqual(vlans[2],
+                         router_dict[1]['_interfaces'][1]['mapping_id'])
+
+    @mock.patch('neutron.plugins.cisco.db.l3.l3_router_appliance_db.'
+                'L3RouterApplianceDBMixin.update_floatingip')
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._get_or_create_SNAT_mapping')
+    def test_mapping_id_when_floatingip_added(self, get_snat, update_fip):
+        """Test mapping id generated is called when floating ip is added."""
+
+        fip_info = {}
+        fip_info['port_id'] = 123
+        fip_info['floating_port_id'] = 999
+
+        update_fip.return_value = fip_info
+
+        db_api = db.PhysicalL3RouterApplianceDBMixin()
+
+        ctx = context.get_admin_context()
+        db_api.update_floatingip(ctx, "1", "172.10.0.12")
+        get_snat.assert_called_once_with(ctx, fip_info['floating_port_id'])
+
+    @mock.patch('neutron.plugins.cisco.db.l3.l3_router_appliance_db.'
+                'L3RouterApplianceDBMixin.update_floatingip')
+    @mock.patch('neutron.plugins.cisco.db.l3.asr_l3_router_appliance_db.'
+                'PhysicalL3RouterApplianceDBMixin._delete_SNAT_mapping')
+    def test_mapping_id_when_floatingip_deleted(self, del_snat, update_fip):
+        """Test mapping id deletion is called when floating ip is deleted."""
+
+        fip_info = {}
+        fip_info['port_id'] = None
+        fip_info['floating_port_id'] = 888
+
+        update_fip.return_value = fip_info
+
+        db_api = db.PhysicalL3RouterApplianceDBMixin()
+
+        ctx = context.get_admin_context()
+        db_api.update_floatingip(ctx, "1", "172.0.0.12")
+        del_snat.assert_called_once_with(ctx, fip_info['floating_port_id'])
 
 
 class TestPhysicalL3RouterApplianceDBMixinMapping(
