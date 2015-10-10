@@ -1,5 +1,4 @@
 pbr==0.10.0
-pytz==2012d
 amqp==1.4.5
 
 Paste
