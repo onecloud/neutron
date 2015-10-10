@@ -56,8 +56,8 @@ HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 SNAT_REGEX = "ip nat inside source static \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf "
-+ NROUTER_REGEX + " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
+    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + \
+    " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
 
 NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
