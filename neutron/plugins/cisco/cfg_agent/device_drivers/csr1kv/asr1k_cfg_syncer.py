@@ -169,8 +169,8 @@ class ConfigSyncer(object):
                         if intf['device_owner'] == \
                                 constants.DEVICE_OWNER_ROUTER_INTF:
                             if is_port_v6(intf) != True:
-                                intf_segment_id = intf['hosting_info']
-                                ['segmentation_id']
+                                intf_segment_id = \
+                                    intf['hosting_info']['segmentation_id']
                                 segment_nat_dict[gw_segment_id] = True
                                 segment_nat_dict[intf_segment_id] = True
 
