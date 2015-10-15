@@ -34,6 +34,7 @@ from neutron.openstack.common import rpc as o_rpc  # ICEHOUSE_BACKPORT
 
 LOG = logging.getLogger(__name__)
 
+
 DEVICE_OWNER_ROUTER_HA_INTF = "network:router_ha_interface"
 DEVICE_OWNER_ROUTER_HA_GW = "network:router_ha_gateway"
 PHYSICAL_GLOBAL_ROUTER_ID = "PHYSICAL_GLOBAL_ROUTER_ID"
@@ -97,7 +98,8 @@ class PhysicalCiscoRouterPlugin(db_base_plugin_v2.CommonDbMixin,
     def setup_rpc(self):
         # RPC support
         self.topic = topics.L3PLUGIN
-        # self.conn = n_rpc.create_connection(new=True)  # ICEHOUSE_BACKPORT
+        # ICEHOUSE_BACKPORT
+        # self.conn = n_rpc.create_connection(new=True)
         self.conn = o_rpc.create_connection(new=True)
         # ICEHOUSE_BACKPORT
         self.callbacks = CiscoRouterPluginRpcCallbacks(self)

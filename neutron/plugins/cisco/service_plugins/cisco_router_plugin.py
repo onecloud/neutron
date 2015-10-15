@@ -40,7 +40,7 @@ from neutron.openstack.common import log as logging
 # from neutron.common import constants as common_constants
 
 # from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import \
-#    (asr1k_routing_driver as asr1k_driver)
+#  (asr1k_routing_driver as asr1k_driver)
 
 LOG = logging.getLogger(__name__)
 
