@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 import ciscoconfparse
 from ncclient import manager
 
-from oslo.config import cfg
+#  from oslo.config import cfg
 
 from neutron.plugins.cisco.cfg_agent import cfg_exceptions as cfg_exc
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
@@ -36,6 +36,7 @@ LOG = logging.getLogger(__name__)
 # N1kv constants
 T1_PORT_NAME_PREFIX = 't1_p:'  # T1 port/network is for VXLAN
 T2_PORT_NAME_PREFIX = 't2_p:'  # T2 port/network is for VLAN
+
 
 class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     """CSR1kv Routing Driver.
@@ -56,7 +57,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             if credentials:
                 self._csr_user = credentials['username']
                 self._csr_password = credentials['password']
-            #self._timeout = cfg.CONF.device_connection_timeout
+            #  self._timeout = cfg.CONF.device_connection_timeout
             self._timeout = device_params['booting_time']
             self._csr_conn = None
             self._intfs_enabled = False
@@ -65,7 +66,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
                         "CSR1kvRoutingDriver initialization"), e)
             raise cfg_exc.CSR1kvInitializationException()
 
-    ###### Public Functions ########
+    # Public Functions
     def router_added(self, ri):
         self._csr_create_vrf(ri)
 
@@ -84,15 +85,15 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._csr_create_subinterface(ri, ex_gw_port, True)
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip:
-            #Set default route via this network's gateway ip
+            # Set default route via this network's gateway ip
             self._csr_add_default_route(ri, ex_gw_ip)
 
     def external_gateway_removed(self, ri, ex_gw_port):
         ex_gw_ip = ex_gw_port['subnet']['gateway_ip']
         if ex_gw_ip:
-            #Remove default route via this network's gateway i
+            # Remove default route via this network's gateway i
             self._csr_remove_default_route(ri, ex_gw_ip)
-        #Finally, remove external network subinterface
+        # Finally, remove external network subinterface
         self._csr_remove_subinterface(ex_gw_port)
 
     def enable_internal_network_NAT(self, ri, port, ex_gw_port):
@@ -113,7 +114,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
     def clear_connection(self):
         self._csr_conn = None
 
-    ##### Internal Functions  ####
+    # Internal Functions
 
     def _csr_create_subinterface(self, ri, port):
         vrf_name = self._csr_get_vrf_name(ri)
@@ -135,7 +136,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             'VRRP': CSR1kvRoutingDriver._csr_add_ha_VRRP,
             'GBLP': CSR1kvRoutingDriver._csr_add_ha_GBLP
         }
-        #Invoke the right function for the ha type
+        # Invoke the right function for the ha type
         func_dict[ri.ha_info['ha:type']](self, ri, port)
 
     def _csr_add_ha_HSRP(self, ri, port):
@@ -172,18 +173,18 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
 
     def _csr_remove_internalnw_nat_rules(self, ri, ports, ex_port):
         acls = []
-        #First disable nat in all inner ports
+        # First disable nat in all inner ports
         for port in ports:
             in_intfc_name = self._get_interface_name_from_hosting_port(port)
             inner_vlan = self._get_interface_vlan_from_hosting_port(port)
             acls.append("acl_" + str(inner_vlan))
             self._remove_interface_nat(in_intfc_name, 'inside')
 
-        #Wait for two second
+        # Wait for two second
         LOG.debug("Sleep for 2 seconds before clearing NAT rules")
         time.sleep(2)
 
-        #Clear the NAT translation table
+        # Clear the NAT translation table
         self._remove_dyn_nat_translations()
 
         # Remove dynamic NAT rules and ACLs
@@ -209,11 +210,11 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         out_intfc_name = self._get_interface_name_from_hosting_port(ex_gw_port)
         # First remove NAT from outer interface
         self._remove_interface_nat(out_intfc_name, 'outside')
-        #Clear the NAT translation table
+        # Clear the NAT translation table
         self._remove_dyn_nat_translations()
-        #Remove the floating ip
+        # Remove the floating ip
         self._remove_floating_ip(floating_ip, fixed_ip, vrf_name)
-        #Enable NAT on outer interface
+        # Enable NAT on outer interface
         self._add_interface_nat(out_intfc_name, 'outside')
 
     def _csr_update_routing_table(self, ri, action, route):
@@ -367,7 +368,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         :return: True or False
         """
 
-        #ToDo(Hareesh): Interfaces are hard coded for now. Make it dynamic.
+        # ToDo(Hareesh): Interfaces are hard coded for now. Make it dynamic.
         interfaces = ['GigabitEthernet 2', 'GigabitEthernet 3']
         try:
             for i in interfaces:
@@ -489,7 +490,7 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         self._edit_running_config(confstr, 'CREATE_SUBINTERFACE')
 
     def _remove_subinterface(self, subinterface):
-        #Optional : verify this is the correct subinterface
+        #  Optional : verify this is the correct subinterface
         if self._interface_exists(subinterface):
             confstr = snippets.REMOVE_SUBINTERFACE % subinterface
             self._edit_running_config(confstr, 'REMOVE_SUBINTERFACE')
@@ -547,7 +548,6 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
             confstr = snippets.CREATE_ACL % (acl_no, network, netmask)
             rpc_obj = conn.edit_config(target='running', config=confstr)
             self._check_response(rpc_obj, 'CREATE_ACL')
-
 
         confstr = snippets.SET_DYN_SRC_TRL_INTFC % (acl_no, outer_intfc,
                                                     vrf_name)
@@ -690,7 +690,3 @@ class CSR1kvRoutingDriver(devicedriver_api.RoutingDriverBase):
         e_tag = rpc_obj._root[0][1].text
         params = {'snippet': snippet_name, 'type': e_type, 'tag': e_tag}
         raise cfg_exc.CSR1kvConfigException(**params)
-
-
-
-
