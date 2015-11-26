@@ -554,7 +554,7 @@ class RoutingServiceHelperWithPhyContext(
             LOG.exception("Server heartbeat timeout")
             self.resync_asrs(self.context)
             return  # don't try to configure ASRs, can't get latest DB info
-        except:
+        except Exception:
             e = sys.exc_info()[0]
             LOG.debug("Caught unexpected exception %s"
                       " when attempting agent_heartbeat rpc" % e)
