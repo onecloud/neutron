@@ -14,6 +14,7 @@
 
 #  import collections
 import eventlet
+import sys
 #  import netaddr
 
 from neutron.common import constants as l3_constants
@@ -553,6 +554,10 @@ class RoutingServiceHelperWithPhyContext(
             LOG.exception("Server heartbeat timeout")
             self.resync_asrs(self.context)
             return  # don't try to configure ASRs, can't get latest DB info
+        except Exception:
+            e = sys.exc_info()[0]
+            LOG.debug("Caught unexpected exception %s"
+                      " when attempting agent_heartbeat rpc" % e)
 
         pool = eventlet.GreenPool()
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
