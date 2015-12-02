@@ -107,15 +107,14 @@ SET_INTC_ASR_HSRP_EXTERNAL = """
 # eg: $(config)ip nat inside source static 192.168.0.1 121.158.0.5
 #    ..........vrf nrouter-e7d4y5 redundancy neutron-hsrp-grp-305
 #========================================================================#
-SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
-<config>
-        <cli-config-data>
-            <cmd>ip nat inside source static %s %s vrf %s
-            redundancy neutron-hsrp-grp-%s-%s</cmd>
-        </cli-config-data>
-</config>
-
-"""
+SET_STATIC_SRC_TRL_NO_VRF_MATCH = '<config>' \
+                                  '<cli-config-data>' \
+                                  '<cmd>' \
+                                  'ip nat inside source static %s %s vrf %s ' \
+                                  'redundancy neutron-hsrp-grp-%s-%s' \
+                                  '</cmd>' \
+                                  '</cli-config-data>' \
+                                  '</config>'
 
 #=========================================================================#
 # Remove Static source translation on an interface
@@ -124,15 +123,15 @@ SET_STATIC_SRC_TRL_NO_VRF_MATCH = """
 # eg: $(config)no ip nat inside source static 192.168.0.1 121.158.0.5
 #    ..........vrf nrouter-e7d4y5 redundancy neutron-hsrp-grp-305
 #========================================================================#
-REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH = """
-<config>
-        <cli-config-data>
-            <cmd>no ip nat inside source static %s %s vrf %s
-            redundancy neutron-hsrp-grp-%s-%s</cmd>
-        </cli-config-data>
-</config>
-
-"""
+REMOVE_STATIC_SRC_TRL_NO_VRF_MATCH = '<config>' \
+                                     '<cli-config-data>' \
+                                     '<cmd>' \
+                                     'no ip nat inside source static ' \
+                                     '%s %s vrf %s redundancy ' \
+                                     'neutron-hsrp-grp-%s-%s' \
+                                     '</cmd>' \
+                                     '</cli-config-data>' \
+                                     '</config>'
 
 #=============================================================================#
 # Set default ip route with interface
@@ -366,7 +365,7 @@ GET_SHOW_CLOCK = """
 <filter type="subtree">
     <config-format-text-cmd>
         <text-filter-spec> | inc FFFFFFFFFFFFFFFF</text-filter-spec>
-    </config-format-text-cmd>  # noqa
+    </config-format-text-cmd>
     <oper-data-format-text-block>
         <exec>show clock</exec>
     </oper-data-format-text-block>
