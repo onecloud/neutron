@@ -25,8 +25,7 @@ from neutron.extensions import providernet as pr_net
 from neutron.openstack.common import lockutils
 from neutron.openstack.common import log as logging
 from neutron.plugins.cisco.common import cisco_constants as c_const
-from neutron.plugins.cisco.db.l3 import (l3_router_appliance_db as
-                                         l3_rt_app_db)
+from neutron.plugins.cisco.db.l3 import l3_router_appliance_db
 from neutron.plugins.cisco.l3.rpc import asr_l3_router_rpc_joint_agent_api
 
 from neutron.openstack.common.notifier import api as notifier_api
@@ -77,7 +76,8 @@ class CiscoPhyRouterPortBinding(model_base.BASEV2):
                               ondelete='CASCADE'))
 
 
-class PhysicalL3RouterApplianceDBMixin(l3_rt_app_db.L3RouterApplianceDBMixin):
+class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
+                                       L3RouterApplianceDBMixin):
 
     @property
     def l3_cfg_rpc_notifier(self):
@@ -510,11 +510,11 @@ class PhysicalL3RouterApplianceDBMixin(l3_rt_app_db.L3RouterApplianceDBMixin):
 
     def create_router(self, context, router):
         with context.session.begin(subtransactions=True):
-            router_created = (super(
-                              l3_rt_app_db.L3RouterApplianceDBMixin, self).
-                              create_router(context, router))
-            # backlog or start immediatey?
+            router_created = \
+                (super(l3_router_appliance_db.L3RouterApplianceDBMixin,
+                       self).create_router(context, router))
             # self.backlog_router(router_created)
+            # backlog or start immediatey?
             self.l3_cfg_rpc_notifier.routers_updated(context,
                                                      [router_created])
         return router_created
@@ -536,9 +536,9 @@ class PhysicalL3RouterApplianceDBMixin(l3_rt_app_db.L3RouterApplianceDBMixin):
                 # already scheduled.
                 self._add_type_and_hosting_device_info(e_context, o_r,
                                                        schedule=False)
-            router_updated = (super(
-                              l3_rt_app_db.L3RouterApplianceDBMixin, self).
-                              update_router(context, id, router))
+            router_updated = \
+                (super(l3_router_appliance_db.L3RouterApplianceDBMixin,
+                       self).update_router(context, id, router))
             routers = [copy.deepcopy(router_updated)]
             self._add_type_and_hosting_device_info(e_context, routers[0])
 
