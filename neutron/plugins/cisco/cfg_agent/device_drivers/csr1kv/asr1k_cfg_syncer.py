@@ -17,7 +17,6 @@ import netaddr
 from neutron.common import constants
 import re
 import xml.etree.ElementTree as ET
-import pdb
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     asr1k_snippets as asr_snippets)
@@ -804,7 +803,6 @@ class ConfigSyncer(object):
 
         #  TODO(NAME): split this big function into smaller functions
         for intf in runcfg_intfs:
-            pdb.set_trace()
             LOG.info("\nOpenstack interface: %s" % (intf))
             intf.segment_id = int(intf.re_match(self.INTF_REGEX, group=1))
             LOG.info("  segment_id: %s" % (intf.segment_id))
