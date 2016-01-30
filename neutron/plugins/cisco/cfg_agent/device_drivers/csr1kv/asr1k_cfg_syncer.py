@@ -17,7 +17,7 @@ import netaddr
 from neutron.common import constants
 import re
 import xml.etree.ElementTree as ET
-
+import pdb
 
 from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
     asr1k_snippets as asr_snippets)
@@ -57,7 +57,7 @@ HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 SNAT_REGEX = "ip nat inside source static \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + \
-    " redundancy neutron-hsrp-grp-(\d+)-(\d+)"
+    " redundancy neutron-hsrp-(\d+)-(\d+)"
 
 NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
@@ -804,6 +804,7 @@ class ConfigSyncer(object):
 
         #  TODO(NAME): split this big function into smaller functions
         for intf in runcfg_intfs:
+            pdb.set_trace()
             LOG.info("\nOpenstack interface: %s" % (intf))
             intf.segment_id = int(intf.re_match(self.INTF_REGEX, group=1))
             LOG.info("  segment_id: %s" % (intf.segment_id))
