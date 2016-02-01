@@ -52,6 +52,14 @@ LOG = logging.getLogger(__name__)
 # IP allocations being cleaned up by cascade.
 AUTO_DELETE_PORT_OWNERS = [constants.DEVICE_OWNER_DHCP]
 
+metacloud_opts = [
+    cfg.IntOpt('subnet_per_network',
+               default=-1,
+               help='Number of subnet per network. Do not check the subnet'
+                    'count if it is a zero or a negative number'),
+]
+cfg.CONF.register_opts(metacloud_opts, group='cis')
+
 
 class CommonDbMixin(object):
     """Common methods used in core and service plugins."""
@@ -1123,6 +1131,25 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
 
         if ip_ver == 6:
             self._validate_ipv6_attributes(s, cur_subnet)
+
+        self._validate_subnet_count(context, s)
+
+    def _validate_subnet_count(self, context, subnet):
+        subnet_per_network = cfg.CONF.metacloud.subnet_per_network
+        if subnet_per_network <= 0:
+            return True
+
+        net_id = subnet.get('network_id', None)
+        if not net_id:
+            raise n_exc.InvalidInput('Missing network id from subnet')
+
+        subnets = self._get_subnets_by_network(context, net_id)
+        if subnets and len(subnets) >= subnet_per_network:
+            err_msg = "Only %s subnet per network is allowed" % \
+                      subnet_per_network
+            raise n_exc.InvalidInput(error_message=(err_msg))
+
+        return True
 
     def _validate_gw_out_of_pools(self, gateway_ip, pools):
         for allocation_pool in pools:
