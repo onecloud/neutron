@@ -109,7 +109,10 @@ class DeviceHandlingMixin(object):
     def l3_tenant_id(cls):
         """Returns id of tenant owning hosting device resources."""
         if cls._l3_tenant_uuid is None:
-            auth_url = cfg.CONF.keystone_authtoken.identity_uri + "/v2.0"
+            # auth_url = cfg.CONF.keystone_authtoken.identity_uri + "/v2.0"
+            auth_url = "http://" + \
+                       cfg.CONF.keystone_authtoken.auth_host + ":" + \
+                       str(cfg.CONF.keystone_authtoken.auth_port) + "/v2.0"
             user = cfg.CONF.keystone_authtoken.admin_user
             pw = cfg.CONF.keystone_authtoken.admin_password
             tenant = cfg.CONF.keystone_authtoken.admin_tenant_name
@@ -336,7 +339,10 @@ class DeviceHandlingMixin(object):
             return True
 
     def _setup_device_handling(self):
-        auth_url = cfg.CONF.keystone_authtoken.identity_uri + "/v2.0"
+        # auth_url = cfg.CONF.keystone_authtoken.identity_uri + "/v2.0"
+        auth_url = "http://" + \
+                   cfg.CONF.keystone_authtoken.auth_host + ":" + \
+                   str(cfg.CONF.keystone_authtoken.auth_port) + "/v2.0"
         u_name = cfg.CONF.keystone_authtoken.admin_user
         pw = cfg.CONF.keystone_authtoken.admin_password
         tenant = cfg.CONF.general.l3_admin_tenant

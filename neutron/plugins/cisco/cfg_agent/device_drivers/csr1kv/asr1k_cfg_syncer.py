@@ -14,16 +14,13 @@
 
 import ciscoconfparse
 import netaddr
-from neutron.common import constants
 import re
 import xml.etree.ElementTree as ET
 
-from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
-    asr1k_snippets as asr_snippets)
-
-# from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import (
-#    cisco_csr1kv_snippets as snippets)
+from neutron.common import constants
 from neutron.openstack.common import log as logging
+from neutron.plugins.cisco.cfg_agent.device_drivers.csr1kv import \
+    asr1k_snippets as asr_snippets
 
 LOG = logging.getLogger(__name__)
 
@@ -49,8 +46,8 @@ DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
 HSRP_REGEX = "\s*standby (\d+) .*"
 
-INTF_V4_ADDR_REGEX = "\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+INTF_V4_ADDR_REGEX = "\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
+                     "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 SNAT_REGEX = "ip nat inside source static \
@@ -58,32 +55,32 @@ SNAT_REGEX = "ip nat inside source static \
     (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + \
     " redundancy neutron-hsrp-(\d+)-(\d+)"
 
-NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + "_nat_pool \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + \
+                 "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
+                 "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
+                 "netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
 NAT_OVERLOAD_REGEX_BASE = "ip nat inside source list neutron_acl_" + \
-    DEP_ID_REGEX + "_(\d+) interface %s\.(\d+) vrf " + \
-    NROUTER_REGEX + " overload"
+                          DEP_ID_REGEX + "_(\d+) interface %s\.(\d+) vrf " + \
+                          NROUTER_REGEX + " overload"
 NAT_POOL_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_" + \
-    DEP_ID_REGEX + "_(\d+) pool " \
-    + NROUTER_REGEX + "_nat_pool vrf " + NROUTER_REGEX + " overload"
+                          DEP_ID_REGEX + "_(\d+) pool " + NROUTER_REGEX + \
+                          "_nat_pool vrf " + NROUTER_REGEX + " overload"
 
 ACL_REGEX = "ip access-list standard neutron_acl_" + DEP_ID_REGEX + "_(\d+)"
-ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
+                  "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + \
-    NROUTER_REGEX + " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + \
+                           " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) " \
+                           "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + \
-    NROUTER_REGEX + " ::/0 %s(\d+)\.(\d+) \
-    ([0-9A-Fa-f:]+)"
+DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + \
+                              " ::/0 %s(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
 
-XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data> \
-    </config>"
+XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data>" \
+                       "</config>"
+
 XML_CMD_TAG = "<cmd>%s</cmd>"
 
 
@@ -99,8 +96,8 @@ class ConfigSyncer(object):
 
     def __init__(self, router_db_info, my_dep_id, other_dep_ids,
                  target_asr_name, target_intf_name):
-        router_id_dict, interface_segment_dict, \
-            segment_nat_dict = self.process_routers_data(router_db_info)
+        router_id_dict, interface_segment_dict, segment_nat_dict = \
+            self.process_routers_data(router_db_info)
         self.router_id_dict = router_id_dict
         self.intf_segment_dict = interface_segment_dict
         self.segment_nat_dict = segment_nat_dict
@@ -127,8 +124,8 @@ class ConfigSyncer(object):
         router_id_dict = {}
         interface_segment_dict = {}
         segment_nat_dict = {}
-        #  TODO(NAME):could combine segment_nat_dict and interface_segment_dict
-        #      into a single "segment_dict"
+        # TODO(onecloud): could combine segment_nat_dict and
+        # interface_segment_dict into a single "segment_dict"
 
         for router in routers:
 
@@ -167,7 +164,7 @@ class ConfigSyncer(object):
                     for intf in interfaces:
                         if intf['device_owner'] == \
                                 constants.DEVICE_OWNER_ROUTER_INTF:
-                            if is_port_v6(intf) != True:
+                            if not is_port_v6(intf):
                                 intf_segment_id = \
                                     intf['hosting_info']['segmentation_id']
                                 segment_nat_dict[gw_segment_id] = True
@@ -288,20 +285,17 @@ class ConfigSyncer(object):
         for router_id in del_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
             confstr = asr_snippets.REMOVE_VRF_DEFN % vrf_name
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
         for router_id, dep_id in invalid_routers:
             vrf_name = "nrouter-%s-%s" % (router_id, dep_id)
             confstr = asr_snippets.REMOVE_VRF_DEFN % vrf_name
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
         for router_id in add_set:
             vrf_name = "nrouter-%s-%s" % (router_id, self.dep_id)
             confstr = asr_snippets.CREATE_VRF_DEFN % vrf_name
             # rpc_obj = conn.edit_config(target='running', config=confstr)
-            conn.edit_config(target='running', config=confstr)
 
     def get_single_cfg(self, cfg_line):
         if len(cfg_line) != 1:
@@ -316,8 +310,8 @@ class ConfigSyncer(object):
         for pool in pools:
             LOG.info("\nNAT pool: %s" % (pool))
             match_obj = re.match(NAT_POOL_REGEX, pool.text)
-            router_id, dep_id, start_ip, end_ip, netmask = match_obj.group(
-                1, 2, 3, 4, 5)
+            router_id, dep_id, start_ip, end_ip, netmask = \
+                match_obj.group(1, 2, 3, 4, 5)
 
             # Check deployment_id
             if dep_id != self.dep_id:
@@ -370,7 +364,6 @@ class ConfigSyncer(object):
             del_cmd = XML_CMD_TAG % ("no %s" % (pool_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Delete pool: %s" % del_cmd)
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
     def clean_default_route(self, conn, router_id_dict, intf_segment_dict,
@@ -380,8 +373,8 @@ class ConfigSyncer(object):
         for route in default_routes:
             LOG.info("\ndefault route: %s" % (route))
             match_obj = re.match(route_regex, route.text)
-            router_id, dep_id, segment_id, next_hop = match_obj.group(
-                1, 2, 3, 4)
+            router_id, dep_id, segment_id, next_hop = \
+                match_obj.group(1, 2, 3, 4)
             segment_id = int(segment_id)
             LOG.info("router_id: %s, segment_id: %s, next_hop: %s" % (
                 router_id, segment_id, next_hop))
@@ -430,7 +423,6 @@ class ConfigSyncer(object):
             del_cmd = XML_CMD_TAG % ("no %s" % (route_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Delete default route: %s" % del_cmd)
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
     def clean_snat(self, conn, router_id_dict, intf_segment_dict,
@@ -513,7 +505,6 @@ class ConfigSyncer(object):
             del_cmd = XML_CMD_TAG % ("no %s" % (fip_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Delete SNAT: %s" % del_cmd)
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
     def clean_nat_pool_overload(self, conn, router_id_dict, intf_segment_dict,
@@ -586,7 +577,6 @@ class ConfigSyncer(object):
             del_cmd = XML_CMD_TAG % ("no %s" % (nat_cfg))
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Delete NAT overload: %s" % del_cmd)
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
 
     # For 'interface' style NAT overload, was previously used but not anymore
@@ -801,7 +791,7 @@ class ConfigSyncer(object):
         # LOG.info("intf_segment_dict: %s" % (intf_segment_dict))
         pending_delete_list = []
 
-        #  TODO(NAME): split this big function into smaller functions
+        # TODO(onecloud): split this big function into smaller functions
         for intf in runcfg_intfs:
             LOG.info("\nOpenstack interface: %s" % (intf))
             intf.segment_id = int(intf.re_match(self.INTF_REGEX, group=1))
@@ -810,8 +800,8 @@ class ConfigSyncer(object):
             # Delete any interfaces where config doesn't match DB
             # Correct config will be added after clearing invalid cfg
 
-            # TODO(NAME): Check that interface name (e.g. Port-channel10)
-            # matches that specified in .ini file
+            # TODO(onecloud): Check that interface name (e.g. Port-channel10)
+            #       matches that specified in .ini file
 
             # Check deployment_id
             description = intf.re_search_children(INTF_DESC_REGEX)
@@ -1000,5 +990,4 @@ class ConfigSyncer(object):
             confstr = XML_FREEFORM_SNIPPET % (del_cmd)
             LOG.info("Deleting %s" % (intf.text))
             #  LOG.info(confstr)
-            # rpc_obj = conn.edit_config(target='running', config=confstr)
             conn.edit_config(target='running', config=confstr)
