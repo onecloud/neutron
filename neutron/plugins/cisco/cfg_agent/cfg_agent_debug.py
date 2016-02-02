@@ -13,7 +13,7 @@
 #    under the License.
 
 from collections import OrderedDict
-from oslo_config import cfg
+from oslo.config import cfg
 
 import datetime
 import logging

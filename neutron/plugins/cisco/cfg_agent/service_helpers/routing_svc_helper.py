@@ -625,7 +625,7 @@ class RoutingServiceHelper(object):
             "RTR_INT_INTF_ADD",
             self.context.request_id,
             comment="asr %s net-id: %s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 pp.pformat(port['network_id'])))
 
         if ri.snat_enabled and ex_gw_port:
@@ -635,7 +635,7 @@ class RoutingServiceHelper(object):
                 "DYN_NAT_ADD",
                 self.context.request_id,
                 comment="asr: %s net-id: %s" % (
-                    pp.pformat(self._drivermgr._asr_ent),
+                    pp.pformat(self._drivermgr._asr_ent['ip']),
                     pp.pformat(port['network_id'])))
 
     def _internal_network_removed(self, ri, port, ex_gw_port):
@@ -652,7 +652,7 @@ class RoutingServiceHelper(object):
             "GW_PORT_ADD",
             self.context.request_id,
             comment="asr: %s ext-net-id: %s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 pp.pformat(ex_gw_port['network_id'])))
 
         if ri.snat_enabled and ri.internal_ports:
@@ -663,7 +663,7 @@ class RoutingServiceHelper(object):
                     "DYN_NAT_ADD",
                     self.context.request_id,
                     comment="asr: %s net-id: %s" % (
-                        pp.pformat(self._drivermgr._asr_ent),
+                        pp.pformat(self._drivermgr._asr_ent['ip']),
                         pp.pformat(port['network_id'])))
 
     def _external_gateway_removed(self, ri, ex_gw_port):
@@ -678,7 +678,7 @@ class RoutingServiceHelper(object):
                     "DYN_NAT_RM",
                     self.context.request_id,
                     comment="asr: %s net-id: %s" % (
-                        pp.pformat(self._drivermgr._asr_ent),
+                        pp.pformat(self._drivermgr._asr_ent['ip']),
                         pp.pformat(port['network_id'])))
 
         driver.external_gateway_removed(ri, ex_gw_port)
@@ -687,7 +687,7 @@ class RoutingServiceHelper(object):
             "GW_PORT_RM",
             self.context.request_id,
             comment="asr: %s ext-net-id: %s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 pp.pformat(ex_gw_port['network_id'])))
 
     def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
@@ -698,7 +698,7 @@ class RoutingServiceHelper(object):
             "FIP_ADD",
             self.context.request_id,
             comment="ASR: %s Fix-IP:%s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 fixed_ip))
 
     def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
@@ -709,7 +709,7 @@ class RoutingServiceHelper(object):
             "FIP_RM",
             self.context.request_id,
             comment="ASR: %s Fix-IP:%s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 fixed_ip))
 
     def _routes_updated(self, ri):

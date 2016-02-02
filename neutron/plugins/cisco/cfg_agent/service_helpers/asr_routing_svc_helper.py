@@ -140,7 +140,8 @@ class PhyCiscoRoutingPluginApi(proxy.RpcProxy):
 
 class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
 
-    def __init__(self, asr_ent, plugin_rpc, context, dev_status):
+    def __init__(self, asr_ent, plugin_rpc, context, dev_status, cfg_agent):
+        self.cfg_agent = cfg_agent
         self.router_info = {}
         self.updated_routers = set()
         self.removed_routers = set()
@@ -192,7 +193,7 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             ri.id,
             "RTR_CREATED",
             self.context.request_id,
-            "ASR %s" % pp.pformat(self._drivermgr._asr_ent))
+            "ASR %s" % pp.pformat(self._drivermgr._asr_ent['ip']))
 
     def _internal_network_removed(self, ri, port, ex_gw_port):
         driver = self._drivermgr.get_driver(ri.id)
@@ -202,7 +203,7 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             "RTR_INT_INTF_RM",
             self.context.request_id,
             comment="asr:%s net-id: %s" % (
-                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(self._drivermgr._asr_ent['ip']),
                 pp.pformat(port['network_id'])))
 
         if ri.snat_enabled and ex_gw_port:
@@ -212,7 +213,7 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 "DYN_NAT_RM",
                 self.context.request_id,
                 comment="asr: %s net-id: %s" % (
-                    pp.pformat(self._drivermgr._asr_ent),
+                    pp.pformat(self._drivermgr._asr_ent['ip']),
                     pp.pformat(port['network_id'])))
 
     def process_service(self, device_ids=None, removed_devices_info=None):
@@ -221,6 +222,14 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             self._drivermgr.get_driver(None).send_empty_cfg()
             # self._drivermgr.get_driver(None).get_show_clock()
             LOG.debug("Routing service processing started")
+
+            LOG.debug("**** cfg_agent_debug:%s" % (
+                self.cfg_agent.cfg_agent_debug.get_all_agent_txns_strfmt()))
+            LOG.debug("**** cfg_agent_debug routers:%s" % (
+                self.cfg_agent.cfg_agent_debug.get_all_router_txns_strfmt()))
+            LOG.debug("**** cfg_agent_debug fips:%s" % (
+                self.cfg_agent.cfg_agent_debug.get_all_fip_txns_strfmt()))
+
             resources = {}
             routers = []
             removed_routers = []
@@ -231,7 +240,7 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                     "cfg_agent",
                     "FULL_SYNC_START",
                     None,
-                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent)))
+                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent['ip'])))
 
                 # Setting all_routers_flag and clear the global full_sync flag
                 all_routers_flag = True
@@ -247,7 +256,7 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                     "cfg_agent",
                     "FULL_SYNC_END",
                     None,
-                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent)))
+                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent['ip'])))
             else:
                 if self.updated_routers:
                     router_ids = list(self.updated_routers)
@@ -543,7 +552,11 @@ class RoutingServiceHelperWithPhyContext(
         self._asr_contexts = {}
         for asr in self._asr_config.get_asr_list():
             self._asr_contexts[asr['name']] = PhyRouterContext(
-                asr, self.plugin_rpc, self.context, self._dev_status)
+                asr,
+                self.plugin_rpc,
+                self.context,
+                self._dev_status,
+                cfg_agent)
 
     # Notifications from Plugin
 
