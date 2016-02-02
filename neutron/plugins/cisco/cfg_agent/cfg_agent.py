@@ -38,6 +38,7 @@ from neutron.openstack.common import loopingcall
 from neutron.openstack.common import periodic_task
 from neutron.openstack.common import service
 from neutron.openstack.common import timeutils
+from neutron.plugins.cisco.cfg_agent import cfg_agent_debug
 from neutron.plugins.cisco.cfg_agent import device_status
 from neutron.plugins.cisco.common import cisco_constants as c_constants
 from neutron import service as neutron_service
@@ -129,6 +130,8 @@ class CiscoCfgAgent(manager.Manager):
         self.context = n_context.get_admin_context_without_session()
 
         self._initialize_rpc(host)
+        self.cfg_agent_debug = cfg_agent_debug.CfgAgentDebug()
+
         self._initialize_service_helpers(host)
         self._start_periodic_tasks()
         super(CiscoCfgAgent, self).__init__(host=self.conf.host)

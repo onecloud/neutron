@@ -14,6 +14,7 @@
 
 #  import collections
 import eventlet
+import pprint as pp
 import sys
 #  import netaddr
 
@@ -187,12 +188,32 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
         driver = self._drivermgr.set_driver(router)
         driver.router_added(ri)
         self.router_info[router_id] = ri
+        self.cfg_agent.cfg_agent_debug.add_router_txn(
+            ri.id,
+            "RTR_CREATED",
+            self.context.request_id,
+            "ASR %s" % pp.pformat(self._drivermgr._asr_ent))
 
     def _internal_network_removed(self, ri, port, ex_gw_port):
         driver = self._drivermgr.get_driver(ri.id)
         driver.internal_network_removed(ri, port)
+        self.cfg_agent.cfg_agent_debug.add_router_txn(
+            ri.id,
+            "RTR_INT_INTF_RM",
+            self.context.request_id,
+            comment="asr:%s net-id: %s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(port['network_id'])))
+
         if ri.snat_enabled and ex_gw_port:
             driver.disable_internal_network_NAT(ri, port, ex_gw_port, True)
+            self.cfg_agent.cfg_agent_debug.add_router_txn(
+                ri.id,
+                "DYN_NAT_RM",
+                self.context.request_id,
+                comment="asr: %s net-id: %s" % (
+                    pp.pformat(self._drivermgr._asr_ent),
+                    pp.pformat(port['network_id'])))
 
     def process_service(self, device_ids=None, removed_devices_info=None):
         try:
@@ -206,6 +227,12 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
             all_routers_flag = False
             if self.fullsync:
                 LOG.debug("FullSync flag is on. Starting fullsync")
+                self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                    "cfg_agent",
+                    "FULL_SYNC_START",
+                    None,
+                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent)))
+
                 # Setting all_routers_flag and clear the global full_sync flag
                 all_routers_flag = True
                 self.fullsync = False
@@ -216,6 +243,11 @@ class PhyRouterContext(routing_svc_helper.RoutingServiceHelper):
                 existing_cfg_dict = self.delete_invalid_cfg(routers)
                 self.prepare_fullsync(existing_cfg_dict)
                 self.router_info = {}
+                self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                    "cfg_agent",
+                    "FULL_SYNC_END",
+                    None,
+                    "ASR %s" % (pp.pformat(self._drivermgr._asr_ent)))
             else:
                 if self.updated_routers:
                     router_ids = list(self.updated_routers)
@@ -520,30 +552,56 @@ class RoutingServiceHelperWithPhyContext(
         LOG.debug('Got router deleted notification for %s', routers)
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.removed_routers.update(routers)
+            self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                "cfg_agent",
+                "RTRS_DELETED",
+                None,
+                "asr:%s routers:%s" % (asr_name, pp.pformat(routers)))
 
     def routers_updated(self, context, routers):
         """Deal with routers modification and creation RPC message."""
         LOG.debug('Got routers updated notification :%s', routers)
+
         if routers:
             # This is needed for backward compatibility
             if isinstance(routers[0], dict):
                 routers = [router['id'] for router in routers]
             for asr_name, asr_ctx in self._asr_contexts.iteritems():
                 asr_ctx.updated_routers.update(routers)
+                self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                    "cfg_agent",
+                    "RTRS_UPDATED",
+                    None,
+                    "asr:%s routers:%s" % (asr_name, pp.pformat(routers)))
 
     def router_removed_from_agent(self, context, payload):
         LOG.debug('Got router removed from agent :%r', payload)
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.removed_routers.add(payload['router_id'])
+            self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                "cfg_agent",
+                "RTRS_RM_FROM_AGENT",
+                None,
+                "asr:%s router:%s" % (asr_name, payload['router_id']))
 
     def router_added_to_agent(self, context, payload):
         LOG.debug('Got router added to agent :%r', payload)
         self.routers_updated(context, payload)
+        self.cfg_agent.cfg_agent_debug.add_agent_txn(
+            "cfg_agent",
+            "RTR_ADD_TO_AGENT",
+            None,
+            "router:%s" % (payload['router_id']))
 
     #  General Notifications
     def resync_asrs(self, context):
         for asr_name, asr_ctx in self._asr_contexts.iteritems():
             asr_ctx.fullsync = True
+            self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                "cfg_agent",
+                "ENQ FULL_SYNC",
+                None,
+                "asr:%s" % (asr_name))
 
     # Routing service helper public methods
     def process_service(self, device_ids=None, removed_devices_info=None):
@@ -552,12 +610,18 @@ class RoutingServiceHelperWithPhyContext(
             self.plugin_rpc.agent_heartbeat(self.context)
         except o_rpc.common.Timeout:
             LOG.exception("Server heartbeat timeout")
+            self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                "cfg_agent",
+                "AGENT_PLUGIN_TIMEOUT",
+                None,
+                "")
             self.resync_asrs(self.context)
             return  # don't try to configure ASRs, can't get latest DB info
         except Exception:
             e = sys.exc_info()[0]
-            LOG.debug("Caught unexpected exception %s"
-                      " when attempting agent_heartbeat rpc" % e)
+            LOG.exception(
+                "Caught unexpected exception %s"
+                " when attempting agent_heartbeat rpc" % e)
 
         pool = eventlet.GreenPool()
         for asr_name, asr_ctx in self._asr_contexts.iteritems():

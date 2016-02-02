@@ -17,6 +17,7 @@
 import collections
 import eventlet
 import netaddr
+import pprint as pp
 
 from neutron.common import constants as l3_constants
 from neutron.common import rpc as n_rpc
@@ -599,6 +600,12 @@ class RoutingServiceHelper(object):
                 driver = self._drivermgr.get_driver(router_id)
                 driver.router_removed(ri)
                 self._drivermgr.remove_driver(router_id)
+                self.cfg_agent.cfg_agent_debug.add_router_txn(
+                    ri.id,
+                    "RTR_RM",
+                    self.context.request_id,
+                    "ASR %s" % pp.pformat(self._drivermgr._asr_ent))
+
             del self.router_info[router_id]
             self.removed_routers.discard(router_id)
         except cfg_exceptions.DriverException:
@@ -613,8 +620,23 @@ class RoutingServiceHelper(object):
     def _internal_network_added(self, ri, port, ex_gw_port):
         driver = self._drivermgr.get_driver(ri.id)
         driver.internal_network_added(ri, port)
+        self.cfg_agent.cfg_agent_debug.add_router_txn(
+            ri.id,
+            "RTR_INT_INTF_ADD",
+            self.context.request_id,
+            comment="asr %s net-id: %s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(port['network_id'])))
+
         if ri.snat_enabled and ex_gw_port:
             driver.enable_internal_network_NAT(ri, port, ex_gw_port)
+            self.cfg_agent.cfg_agent_debug.add_router_txn(
+                ri.id,
+                "DYN_NAT_ADD",
+                self.context.request_id,
+                comment="asr: %s net-id: %s" % (
+                    pp.pformat(self._drivermgr._asr_ent),
+                    pp.pformat(port['network_id'])))
 
     def _internal_network_removed(self, ri, port, ex_gw_port):
         driver = self._drivermgr.get_driver(ri.id)
@@ -625,9 +647,24 @@ class RoutingServiceHelper(object):
     def _external_gateway_added(self, ri, ex_gw_port):
         driver = self._drivermgr.get_driver(ri.id)
         driver.external_gateway_added(ri, ex_gw_port)
+        self.cfg_agent.cfg_agent_debug.add_router_txn(
+            ri.id,
+            "GW_PORT_ADD",
+            self.context.request_id,
+            comment="asr: %s ext-net-id: %s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(ex_gw_port['network_id'])))
+
         if ri.snat_enabled and ri.internal_ports:
             for port in ri.internal_ports:
                 driver.enable_internal_network_NAT(ri, port, ex_gw_port)
+                self.cfg_agent.cfg_agent_debug.add_router_txn(
+                    ri.id,
+                    "DYN_NAT_ADD",
+                    self.context.request_id,
+                    comment="asr: %s net-id: %s" % (
+                        pp.pformat(self._drivermgr._asr_ent),
+                        pp.pformat(port['network_id'])))
 
     def _external_gateway_removed(self, ri, ex_gw_port):
         LOG.debug("\n\n\n******* EGR\n    ri: %s\n  egp: %s" % (
@@ -636,15 +673,44 @@ class RoutingServiceHelper(object):
         if ri.snat_enabled and ri.internal_ports:
             for port in ri.internal_ports:
                 driver.disable_internal_network_NAT(ri, port, ex_gw_port)
+                self.cfg_agent.cfg_agent_debug.add_router_txn(
+                    ri.id,
+                    "DYN_NAT_RM",
+                    self.context.request_id,
+                    comment="asr: %s net-id: %s" % (
+                        pp.pformat(self._drivermgr._asr_ent),
+                        pp.pformat(port['network_id'])))
+
         driver.external_gateway_removed(ri, ex_gw_port)
+        self.cfg_agent.cfg_agent_debug.add_router_txn(
+            ri.id,
+            "GW_PORT_RM",
+            self.context.request_id,
+            comment="asr: %s ext-net-id: %s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                pp.pformat(ex_gw_port['network_id'])))
 
     def _floating_ip_added(self, ri, ex_gw_port, floating_ip, fixed_ip):
         driver = self._drivermgr.get_driver(ri.id)
         driver.floating_ip_added(ri, ex_gw_port, floating_ip, fixed_ip)
+        self.cfg_agent.cfg_agent_debug.add_floating_ip_txn(
+            floating_ip,
+            "FIP_ADD",
+            self.context.request_id,
+            comment="ASR: %s Fix-IP:%s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                fixed_ip))
 
     def _floating_ip_removed(self, ri, ex_gw_port, floating_ip, fixed_ip):
         driver = self._drivermgr.get_driver(ri.id)
         driver.floating_ip_removed(ri, ex_gw_port, floating_ip, fixed_ip)
+        self.cfg_agent.cfg_agent_debug.add_floating_ip_txn(
+            floating_ip,
+            "FIP_RM",
+            self.context.request_id,
+            comment="ASR: %s Fix-IP:%s" % (
+                pp.pformat(self._drivermgr._asr_ent),
+                fixed_ip))
 
     def _routes_updated(self, ri):
         """Update the state of routes in the router.
