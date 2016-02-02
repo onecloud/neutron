@@ -233,11 +233,11 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
 
     def _validate_router_interface(self, context, interface_info):
         """Validate router interface."""
-        if not cfg.CONF.metacloud.external_net_as_internal_if:
+        if not cfg.CONF.cis.external_net_as_internal_if:
             self._validate_external_net_as_internal_if(context,
                                                        interface_info)
 
-        if not cfg.CONF.metacloud.internal_net_on_multiple_routers:
+        if not cfg.CONF.cis.internal_net_on_multiple_routers:
             self._validate_internal_net_on_multiple_routers(context,
                                                             interface_info)
 
