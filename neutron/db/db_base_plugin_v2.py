@@ -1135,7 +1135,7 @@ class NeutronDbPluginV2(neutron_plugin_base_v2.NeutronPluginBaseV2,
         self._validate_subnet_count(context, s)
 
     def _validate_subnet_count(self, context, subnet):
-        subnet_per_network = cfg.CONF.metacloud.subnet_per_network
+        subnet_per_network = cfg.CONF.cis.subnet_per_network
         if subnet_per_network <= 0:
             return True
 
