@@ -46,40 +46,51 @@ DOT1Q_REGEX = "\s*encapsulation dot1Q (\d+)"
 INTF_NAT_REGEX = "\s*ip nat (inside|outside)"
 HSRP_REGEX = "\s*standby (\d+) .*"
 
-INTF_V4_ADDR_REGEX = "\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
-                     "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+INTF_V4_ADDR_REGEX = ("\s*ip address (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+                      "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 HSRP_V4_VIP_REGEX = "\s*standby (\d+) ip (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
 
-SNAT_REGEX = "ip nat inside source static \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) \
-    (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " + NROUTER_REGEX + \
-    " redundancy neutron-hsrp-(\d+)-(\d+)"
+SNAT_REGEX = ("ip nat inside source static"
+              " (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+              " (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) vrf " +
+              NROUTER_REGEX +
+              " redundancy neutron-hsrp-(\d+)-(\d+)")
 
-NAT_POOL_REGEX = "ip nat pool " + NROUTER_REGEX + \
-                 "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
-                 "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
-                 "netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+NAT_POOL_REGEX = ("ip nat pool " +
+                  NROUTER_REGEX +
+                  "_nat_pool (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+                  "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+                  "netmask (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 
-NAT_OVERLOAD_REGEX_BASE = "ip nat inside source list neutron_acl_" + \
-                          DEP_ID_REGEX + "_(\d+) interface %s\.(\d+) vrf " + \
-                          NROUTER_REGEX + " overload"
-NAT_POOL_OVERLOAD_REGEX = "ip nat inside source list neutron_acl_" + \
-                          DEP_ID_REGEX + "_(\d+) pool " + NROUTER_REGEX + \
-                          "_nat_pool vrf " + NROUTER_REGEX + " overload"
+NAT_OVERLOAD_REGEX_BASE = ("ip nat inside source list neutron_acl_" +
+                           DEP_ID_REGEX +
+                           "_(\d+) interface %s\.(\d+) vrf " +
+                           NROUTER_REGEX +
+                           " overload")
+
+NAT_POOL_OVERLOAD_REGEX = ("ip nat inside source list neutron_acl_" +
+                           DEP_ID_REGEX +
+                           "_(\d+) pool " +
+                           NROUTER_REGEX +
+                           "_nat_pool vrf " +
+                           NROUTER_REGEX +
+                           " overload")
 
 ACL_REGEX = "ip access-list standard neutron_acl_" + DEP_ID_REGEX + "_(\d+)"
-ACL_CHILD_REGEX = "\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) " \
-                  "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+ACL_CHILD_REGEX = ("\s*permit (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) "
+                   "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 
-DEFAULT_ROUTE_REGEX_BASE = "ip route vrf " + NROUTER_REGEX + \
-                           " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) " \
-                           "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+DEFAULT_ROUTE_REGEX_BASE = ("ip route vrf " +
+                            NROUTER_REGEX +
+                            " 0\.0\.0\.0 0\.0\.0\.0 %s\.(\d+) "
+                            "(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})")
 
-DEFAULT_ROUTE_V6_REGEX_BASE = "ipv6 route vrf " + NROUTER_REGEX + \
-                              " ::/0 %s(\d+)\.(\d+) ([0-9A-Fa-f:]+)"
+DEFAULT_ROUTE_V6_REGEX_BASE = ("ipv6 route vrf " +
+                               NROUTER_REGEX +
+                               " ::/0 %s(\d+)\.(\d+) ([0-9A-Fa-f:]+)")
 
-XML_FREEFORM_SNIPPET = "<config><cli-config-data>%s</cli-config-data>" \
-                       "</config>"
+XML_FREEFORM_SNIPPET = ("<config><cli-config-data>%s</cli-config-data>"
+                        "</config>")
 
 XML_CMD_TAG = "<cmd>%s</cmd>"
 
@@ -943,15 +954,13 @@ class ConfigSyncer(object):
                 continue
 
             if intf.is_external:
-                correct_grp_num = self._get_hsrp_grp_num_from_net_id
-                (db_intf['network_id'])
+                correct_grp_num = \
+                    self._get_hsrp_grp_num_from_net_id(db_intf['network_id'])
             else:
-                correct_grp_num = self._get_hsrp_grp_num_from_router_id
-                (db_intf['device_id'])
+                correct_grp_num = \
+                    self._get_hsrp_grp_num_from_router_id(db_intf['device_id'])
 
             # Check HSRP VIP
-            HSRP_V4_VIP_REGEX = "\s * standby (\d +) ip \
-                (\d{1, 3}\.\d{1, 3}\.\d{1, 3}\.\d{1, 3})"
             hsrp_vip_cfg_list = intf.re_search_children(HSRP_V4_VIP_REGEX)
             if len(hsrp_vip_cfg_list) < 1:
                 LOG.info("Intferace is missing HSRP VIP, deleting")
