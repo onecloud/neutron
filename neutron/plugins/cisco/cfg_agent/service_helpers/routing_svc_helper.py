@@ -269,6 +269,11 @@ class RoutingServiceHelper(object):
         except Exception:
             LOG.exception(_("Failed processing routers"))
             self.fullsync = True
+            self.cfg_agent.cfg_agent_debug.add_agent_txn(
+                "cfg_agent",
+                "ENQ_FULL_SYNC",
+                None,
+                "Exception caught")
 
     def collect_state(self, configurations):
         """Collect state from this helper.
@@ -338,7 +343,7 @@ class RoutingServiceHelper(object):
                 "ENQ_FULL_SYNC",
                 None,
                 "RPCException triggered")
-            return []
+            raise
 
     @staticmethod
     def _get_router_ids_from_removed_devices_info(removed_devices_info):
