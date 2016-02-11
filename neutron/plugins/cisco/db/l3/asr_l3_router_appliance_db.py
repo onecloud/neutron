@@ -283,8 +283,7 @@ class PhysicalL3RouterApplianceDBMixin(l3_router_appliance_db.
         routers = self.get_routers(context)
         for router in routers:
             # fail if one of the routers has subnet collision.
-            router_obj = self._get_router(context, router['id'])
-            self._check_for_dup_router_subnet(context, router_obj,
+            self._check_for_dup_router_subnet(context, router['id'],
                                               subnet['network_id'],
                                               subnet_id,
                                               subnet['cidr'])
